@@ -8,15 +8,15 @@
  */
 
 // 1. Módulos y dependencias
-require('dotenv').config(); 
-const { MongoClient, ObjectId } = require('mongodb'); 
-const { GoogleGenerativeAI } = require('@google/generative-ai'); 
-// Usamos el nuevo módulo de publicación para el blog de afland.es
-const { publishToAflandBlog } = require('./afland-publisher');
+require('dotenv').config();
+const { MongoClient, ObjectId } = require('mongodb');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+// Importamos las dos funciones necesarias del módulo de publicación
+const { publishToAflandBlog, uploadImageToWordPress } = require('./afland-publisher');
 
 // 2. Configuración
 const mongoUri = process.env.MONGO_URI;
-const dbName = process.env.DB_NAME || 'duende-finder';
+const dbName = process.env.DB_NAME || 'DuendeDB';
 const eventsCollectionName = 'events';
 
 const aflandToken = process.env.AFLAND_API_KEY;
@@ -30,8 +30,8 @@ const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
  * @returns {string} El texto del post generado, o null en caso de error.
  */
 async function generatePost(event) {
-    const prompt = `Crea una entrada de blog detallada y atractiva sobre el evento: ${JSON.stringify(event)}. La entrada debe incluir un título, una descripción y un llamado a la acción al final. El tono debe ser formal y informativo, optimizado para SEO en el blog de afland.es.`;
-    
+    const prompt = `Crea una entrada de blog detallada y atractiva sobre el evento: ${JSON.stringify(event)}. La entrada debe incluir un título, una descripción y un llamado a la acción al final. El tono debe ser formal y optimizado para SEO.`;
+
     try {
         const result = await model.generateContent(prompt);
         const response = result.response;
@@ -92,16 +92,20 @@ async function runContentCreator() {
             console.log(`\n✨ Procesando evento con ID: ${event._id}`);
 
             const generatedPost = await generatePost(event);
-            
+
             if (generatedPost) {
-                // Asumimos que la primera línea es el título y el resto es el contenido
                 const [postTitle, ...postContentArray] = generatedPost.split('\n');
                 const postContent = postContentArray.join('\n').trim();
 
-                console.log('📝 Título generado:', postTitle);
-                console.log('📝 Contenido generado:', postContent);
-                
-                await publishToAflandBlog(postTitle, postContent, aflandToken);
+                let featuredMediaId = null;
+                // Lógica NUEVA: Si el evento tiene una URL de imagen, la subimos a WordPress
+                if (event.imageUrl) {
+                    featuredMediaId = await uploadImageToWordPress(event.imageUrl, aflandToken);
+                } else {
+                    console.log('🖼️ No se encontró URL de imagen para el evento.');
+                }
+
+                await publishToAflandBlog(postTitle, postContent, aflandToken, featuredMediaId);
 
                 await updateEventStatus(eventsCollection, event._id, 'processed');
             } else {
@@ -120,4 +124,5 @@ async function runContentCreator() {
 
 // 6. Ejecución del script
 runContentCreator();
+
 
