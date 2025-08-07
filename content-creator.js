@@ -2,41 +2,84 @@
 
 /**
  * Script autónomo para el proyecto "Duende Finder".
- * Se encarga de buscar eventos con 'contentStatus: "pending"',
- * generar contenido para redes sociales con la API de Gemini
- * y publicar en el blog de afland.es.
+ * Busca eventos con 'contentStatus: "pending"',
+ * genera contenido de blog optimizado para SEO con la API de Gemini
+ * y lo publica en el blog de afland.es.
  */
 
 // 1. Módulos y dependencias
 require('dotenv').config();
 const { MongoClient, ObjectId } = require('mongodb');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-// Importamos las dos funciones necesarias del módulo de publicación
 const { publishToAflandBlog, uploadImageToWordPress } = require('./afland-publisher');
 
 // 2. Configuración
 const mongoUri = process.env.MONGO_URI;
 const dbName = process.env.DB_NAME || 'DuendeDB';
 const eventsCollectionName = 'events';
-
 const aflandToken = process.env.AFLAND_API_KEY;
+const geminiApiKey = process.env.GEMINI_API_KEY;
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+if (!mongoUri || !geminiApiKey || !aflandToken) {
+    throw new Error('Faltan variables de entorno críticas para MongoDB, Gemini o WordPress/Afland.');
+}
+
+const genAI = new GoogleGenerativeAI(geminiApiKey);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 /**
- * Genera un post para el blog utilizando la API de Gemini.
+ * Genera un post estructurado para el blog utilizando la API de Gemini.
  * @param {object} event - El documento del evento de la base de datos.
- * @returns {string} El texto del post generado, o null en caso de error.
+ * @returns {string} El texto estructurado del post generado, o null en caso de error.
  */
-async function generatePost(event) {
-    const prompt = `Crea una entrada de blog detallada y atractiva sobre el evento: ${JSON.stringify(event)}. La entrada debe incluir un título, una descripción y un llamado a la acción al final. El tono debe ser formal y optimizado para SEO.`;
+async function generateStructuredPost(event) {
+    const eventDateFormatted = new Date(event.date).toLocaleDateString('es-ES', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
+
+    const prompt = `
+# CONTEXTO
+Eres "Duende", un experto redactor de SEO y marketing de contenidos para el blog de flamenco "Duende Finder" (afland.es). Tu objetivo es crear un post de blog atractivo y profesional sobre un evento de flamenco.
+
+# TONO
+Apasionado, evocador y respetuoso con la tradición, pero accesible para un público amplio. Usa emojis 💃🎶🔥 de forma natural.
+
+# EVENTO A PROCESAR
+- Nombre: ${event.name}
+- Artista(s): ${event.artist}
+- Fecha: ${eventDateFormatted}
+- Hora: ${event.time}
+- Lugar: ${event.venue}, ${event.city}
+- URL original: ${event.sourceUrl}
+- Descripción base: ${event.description}
+
+# TAREA Y REGLAS DE FORMATO
+Tu única salida debe ser texto estructurado con las siguientes secciones, separadas por "---". No añadas ningún otro texto o comentario.
+
+SLUG:
+[Crea un slug corto y optimizado para SEO (4-5 palabras clave separadas por guiones). Ejemplo: ${event.artist.toLowerCase().replace(/ /g, '-')}-${event.city.toLowerCase().replace(/ /g, '-')}-${event.date}]
+---
+META_TITLE:
+[Crea un título SEO de menos de 60 caracteres, atractivo y con las palabras clave principales.]
+---
+META_DESC:
+[Crea una meta descripción de menos de 155 caracteres, persuasiva y con una llamada a la acción.]
+---
+POST_TITLE:
+[Crea un título H1 atractivo y creativo para el post del blog.]
+---
+POST_CONTENT:
+[Escribe aquí el cuerpo del post en formato Markdown (300-400 palabras).
+- Usa encabezados H2 (##) para las secciones.
+- Usa párrafos cortos.
+- Incluye de forma natural un enlace interno al artista con este formato: [${event.artist}](/artistas/${event.artist.toLowerCase().replace(/ /g, '-')}).
+- Incluye un llamado a la acción al final, invitando a comprar entradas o a visitar la fuente original.]
+`;
 
     try {
         const result = await model.generateContent(prompt);
         const response = result.response;
-        const text = response.text();
-        return text;
+        return response.text();
     } catch (error) {
         console.error('❌ Error al generar contenido con Gemini:', error);
         return null;
@@ -63,8 +106,7 @@ async function updateEventStatus(collection, eventId, status) {
 
 // 3. Función principal del script
 async function runContentCreator() {
-    console.log('🚀 Iniciando el creador de contenidos...');
-
+    console.log('🚀 Iniciando el creador de contenidos (v2 con SEO)...');
     const client = new MongoClient(mongoUri);
 
     try {
@@ -74,11 +116,7 @@ async function runContentCreator() {
         const db = client.db(dbName);
         const eventsCollection = db.collection(eventsCollectionName);
 
-        // 4. Búsqueda de eventos pendientes
-        const pendingEvents = await eventsCollection
-            .find({ contentStatus: 'pending' })
-            .limit(5)
-            .toArray();
+        const pendingEvents = await eventsCollection.find({ contentStatus: 'pending' }).limit(5).toArray();
 
         if (pendingEvents.length === 0) {
             console.log('✅ No hay eventos pendientes por procesar.');
@@ -87,19 +125,28 @@ async function runContentCreator() {
 
         console.log(`🔎 Encontrados ${pendingEvents.length} eventos pendientes.`);
 
-        let publishTime = new Date(); // Hora de publicación inicial
-        const timeIncrement = 60 * 60 * 1000; // 1 hora en milisegundos
+        let publishTime = new Date();
+        const timeIncrement = 60 * 60 * 1000;
 
-        // 5. Procesamiento de eventos
         for (const event of pendingEvents) {
             console.log(`\n✨ Procesando evento con ID: ${event._id}`);
 
-            const generatedPost = await generatePost(event);
+            const structuredPost = await generateStructuredPost(event);
 
-            if (generatedPost) {
-                const [postTitle, ...postContentArray] = generatedPost.split('\n');
-                const postContent = postContentArray.join('\n').trim();
+            if (structuredPost) {
+                const parts = structuredPost.split('---');
+                const slug = parts[0]?.replace('SLUG:', '').trim();
+                const metaTitle = parts[1]?.replace('META_TITLE:', '').trim();
+                const metaDesc = parts[2]?.replace('META_DESC:', '').trim();
+                const postTitle = parts[3]?.replace('POST_TITLE:', '').trim();
+                const postContent = parts[4]?.replace('POST_CONTENT:', '').trim();
 
+                if (!slug || !metaTitle || !postContent) {
+                    console.log('🔴 La IA no devolvió una respuesta estructurada válida. Actualizando a "failed".');
+                    await updateEventStatus(eventsCollection, event._id, 'failed');
+                    continue;
+                }
+                
                 let featuredMediaId = null;
                 if (event.imageUrl) {
                     featuredMediaId = await uploadImageToWordPress(event.imageUrl, aflandToken);
@@ -107,11 +154,20 @@ async function runContentCreator() {
                     console.log('🖼️ No se encontró URL de imagen para el evento.');
                 }
                 
-                // Programamos el post para una hora futura
                 publishTime = new Date(publishTime.getTime() + timeIncrement);
-                console.log(`⏳ Programando post para: ${publishTime.toLocaleString()}`);
+                console.log(`⏳ Programando post "${postTitle}" para: ${publishTime.toLocaleString()}`);
 
-                await publishToAflandBlog(postTitle, postContent, aflandToken, featuredMediaId, publishTime);
+                await publishToAflandBlog({
+                    title: postTitle,
+                    content: postContent,
+                    slug: slug,
+                    status: 'future', // Programamos el post
+                    date: publishTime.toISOString(), // Indicamos la fecha de publicación
+                    meta: { // Objeto meta para el SEO
+                        _aioseo_title: metaTitle,
+                        _aioseo_description: metaDesc
+                    }
+                }, aflandToken, featuredMediaId);
 
                 await updateEventStatus(eventsCollection, event._id, 'processed');
             } else {
