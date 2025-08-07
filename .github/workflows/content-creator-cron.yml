@@ -1,0 +1,39 @@
+# Nombre del flujo de trabajo
+name: Content Creator
+
+# Evento que dispara el flujo de trabajo
+# 'schedule' permite ejecutar el trabajo en un horario fijo usando cron
+on:
+  schedule:
+    # Este cron se ejecuta todos los días a las 8:00 AM.
+    # Puedes ajustar la hora si lo necesitas.
+    - cron: '0 8 * * *'
+
+jobs:
+  run-script:
+    # El entorno donde se ejecutará el trabajo
+    runs-on: ubuntu-latest
+
+    steps:
+      # Paso 1: Obtenemos el código del repositorio
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Paso 2: Configuramos el entorno de Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Paso 3: Instalamos las dependencias
+      - name: Install dependencies
+        run: npm install
+
+      # Paso 4: Ejecutamos el script de Node.js
+      - name: Run content creator script
+        run: node content-creator.js
+        env:
+          # Pasamos los secretos de GitHub como variables de entorno al script
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
