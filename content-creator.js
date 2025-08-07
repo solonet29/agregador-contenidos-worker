@@ -4,31 +4,33 @@
  * Script autónomo para el proyecto "Duende Finder".
  * Se encarga de buscar eventos con 'contentStatus: "pending"',
  * generar contenido para redes sociales con la API de Gemini
- * y actualizar el estado del evento a 'processed'.
+ * y publicar en el blog de afland.es.
  */
 
 // 1. Módulos y dependencias
 require('dotenv').config(); 
 const { MongoClient, ObjectId } = require('mongodb'); 
 const { GoogleGenerativeAI } = require('@google/generative-ai'); 
-const { publishToSocialMedia } = require('./social-media-publisher');
+// Usamos el nuevo módulo de publicación para el blog de afland.es
+const { publishToAflandBlog } = require('./afland-publisher');
 
 // 2. Configuración
 const mongoUri = process.env.MONGO_URI;
 const dbName = process.env.DB_NAME || 'duende-finder';
 const eventsCollectionName = 'events';
 
-// Configuración del cliente de Gemini con la clave de API y el modelo especificado
+const aflandToken = process.env.AFLAND_API_KEY;
+
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 /**
- * Genera un post para redes sociales utilizando la API de Gemini.
+ * Genera un post para el blog utilizando la API de Gemini.
  * @param {object} event - El documento del evento de la base de datos.
  * @returns {string} El texto del post generado, o null en caso de error.
  */
 async function generatePost(event) {
-    const prompt = `Crea un post atractivo para redes sociales sobre el evento: ${JSON.stringify(event)}. El post debe ser conciso, en español, incluir emojis y un llamado a la acción claro.`;
+    const prompt = `Crea una entrada de blog detallada y atractiva sobre el evento: ${JSON.stringify(event)}. La entrada debe incluir un título, una descripción y un llamado a la acción al final. El tono debe ser formal y informativo, optimizado para SEO en el blog de afland.es.`;
     
     try {
         const result = await model.generateContent(prompt);
@@ -90,11 +92,16 @@ async function runContentCreator() {
             console.log(`\n✨ Procesando evento con ID: ${event._id}`);
 
             const generatedPost = await generatePost(event);
-
+            
             if (generatedPost) {
-                console.log('📝 Contenido generado:', generatedPost);
+                // Asumimos que la primera línea es el título y el resto es el contenido
+                const [postTitle, ...postContentArray] = generatedPost.split('\n');
+                const postContent = postContentArray.join('\n').trim();
+
+                console.log('📝 Título generado:', postTitle);
+                console.log('📝 Contenido generado:', postContent);
                 
-                await publishToSocialMedia(generatedPost);
+                await publishToAflandBlog(postTitle, postContent, aflandToken);
 
                 await updateEventStatus(eventsCollection, event._id, 'processed');
             } else {
@@ -102,7 +109,6 @@ async function runContentCreator() {
                 await updateEventStatus(eventsCollection, event._id, 'failed');
             }
         }
-
     } catch (error) {
         console.error('❌ Ha ocurrido un error general:', error);
     } finally {
