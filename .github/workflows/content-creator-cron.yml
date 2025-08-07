@@ -32,8 +32,4 @@ jobs:
       # Paso 4: Ejecutamos el script de Node.js
       - name: Run content creator script
         run: node content-creator.js
-        env:
-          # Pasamos los secretos de GitHub como variables de entorno al script
-          MONGO_URI: ${{ secrets.MONGO_URI }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        
