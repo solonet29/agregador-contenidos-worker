@@ -87,6 +87,9 @@ async function runContentCreator() {
 
         console.log(`🔎 Encontrados ${pendingEvents.length} eventos pendientes.`);
 
+        let publishTime = new Date(); // Hora de publicación inicial
+        const timeIncrement = 60 * 60 * 1000; // 1 hora en milisegundos
+
         // 5. Procesamiento de eventos
         for (const event of pendingEvents) {
             console.log(`\n✨ Procesando evento con ID: ${event._id}`);
@@ -98,14 +101,17 @@ async function runContentCreator() {
                 const postContent = postContentArray.join('\n').trim();
 
                 let featuredMediaId = null;
-                // Lógica NUEVA: Si el evento tiene una URL de imagen, la subimos a WordPress
                 if (event.imageUrl) {
                     featuredMediaId = await uploadImageToWordPress(event.imageUrl, aflandToken);
                 } else {
                     console.log('🖼️ No se encontró URL de imagen para el evento.');
                 }
+                
+                // Programamos el post para una hora futura
+                publishTime = new Date(publishTime.getTime() + timeIncrement);
+                console.log(`⏳ Programando post para: ${publishTime.toLocaleString()}`);
 
-                await publishToAflandBlog(postTitle, postContent, aflandToken, featuredMediaId);
+                await publishToAflandBlog(postTitle, postContent, aflandToken, featuredMediaId, publishTime);
 
                 await updateEventStatus(eventsCollection, event._id, 'processed');
             } else {
