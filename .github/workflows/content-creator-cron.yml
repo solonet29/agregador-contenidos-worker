@@ -7,7 +7,7 @@ on:
   schedule:
     # Este cron se ejecuta todos los días a las 8:00 AM.
     # Puedes ajustar la hora si lo necesitas.
-    - cron: '0 8 * * *'
+    - cron: '0 */8 * * *'
 
 jobs:
   run-script:
