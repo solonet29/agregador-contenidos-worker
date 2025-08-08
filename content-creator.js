@@ -12,12 +12,13 @@ require('dotenv').config();
 const { MongoClient, ObjectId } = require('mongodb');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { publishToAflandBlog, uploadImageToWordPress } = require('./afland-publisher');
+const { marked } = require('marked'); // <-- Importamos la librería para convertir Markdown
 
 // 2. Configuración
 const mongoUri = process.env.MONGO_URI;
 const dbName = process.env.DB_NAME || 'DuendeDB';
 const eventsCollectionName = 'events';
-const aflandToken = process.env.WORDPRESS_APP_PASSWORD;
+const aflandToken = process.env.WORDPRESS_APP_PASSWORD; // Usamos la variable correcta
 const geminiApiKey = process.env.GEMINI_API_KEY;
 
 if (!mongoUri || !geminiApiKey || !aflandToken) {
@@ -106,7 +107,7 @@ async function updateEventStatus(collection, eventId, status) {
 
 // 3. Función principal del script
 async function runContentCreator() {
-    console.log('🚀 Iniciando el creador de contenidos (v2 con SEO)...');
+    console.log('🚀 Iniciando el creador de contenidos (v3 con renderizado HTML)...');
     const client = new MongoClient(mongoUri);
 
     try {
@@ -125,8 +126,9 @@ async function runContentCreator() {
 
         console.log(`🔎 Encontrados ${pendingEvents.length} eventos pendientes.`);
 
+        // Lógica para programar los posts con un intervalo de tiempo
         let publishTime = new Date();
-        const timeIncrement = 60 * 60 * 1000;
+        const timeIncrement = 60 * 60 * 1000; // Incremento de 1 hora
 
         for (const event of pendingEvents) {
             console.log(`\n✨ Procesando evento con ID: ${event._id}`);
@@ -139,31 +141,33 @@ async function runContentCreator() {
                 const metaTitle = parts[1]?.replace('META_TITLE:', '').trim();
                 const metaDesc = parts[2]?.replace('META_DESC:', '').trim();
                 const postTitle = parts[3]?.replace('POST_TITLE:', '').trim();
-                const postContent = parts[4]?.replace('POST_CONTENT:', '').trim();
+                const markdownContent = parts[4]?.replace('POST_CONTENT:', '').trim();
 
-                if (!slug || !metaTitle || !postContent) {
+                if (!slug || !metaTitle || !markdownContent) {
                     console.log('🔴 La IA no devolvió una respuesta estructurada válida. Actualizando a "failed".');
                     await updateEventStatus(eventsCollection, event._id, 'failed');
                     continue;
                 }
                 
+                // Convertimos el contenido de Markdown a HTML
+                const htmlContent = marked(markdownContent);
+                
                 let featuredMediaId = null;
                 if (event.imageUrl) {
                     featuredMediaId = await uploadImageToWordPress(event.imageUrl, aflandToken);
-                } else {
-                    console.log('🖼️ No se encontró URL de imagen para el evento.');
                 }
                 
+                // Incrementamos la hora para el siguiente post
                 publishTime = new Date(publishTime.getTime() + timeIncrement);
                 console.log(`⏳ Programando post "${postTitle}" para: ${publishTime.toLocaleString()}`);
 
                 await publishToAflandBlog({
                     title: postTitle,
-                    content: postContent,
+                    content: htmlContent,
                     slug: slug,
-                    status: 'future', // Programamos el post
+                    status: 'future', // Programamos el post para el futuro
                     date: publishTime.toISOString(), // Indicamos la fecha de publicación
-                    meta: { // Objeto meta para el SEO
+                    meta: { 
                         _aioseo_title: metaTitle,
                         _aioseo_description: metaDesc
                     }
@@ -186,5 +190,3 @@ async function runContentCreator() {
 
 // 6. Ejecución del script
 runContentCreator();
-
-
