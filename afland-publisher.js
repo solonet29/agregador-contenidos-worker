@@ -38,13 +38,13 @@ async function publishToAflandBlog(postData, appPassword, mediaId) {
 
     // Construimos el cuerpo de la petición desde el objeto 'postData'
     const payload = {
-        title: postData.title,
-        content: postData.content,
-        slug: postData.slug,
-        status: postData.status || 'publish', // 'publish' por defecto, o 'future' si se programa
-        meta: postData.meta
-    };
-
+    title: postData.title,
+    content: postData.content,
+    slug: postData.slug,
+    status: postData.status || 'publish',
+    categories: [ 96 ], // <-- Así, con el número 96
+    meta: postData.meta
+};
     // Si la fecha de publicación está definida, la añadimos.
     // Esta es la línea que fallaba antes. Ahora 'postData.date' sí existe.
     if (postData.date) {
