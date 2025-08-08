@@ -17,7 +17,7 @@ const { publishToAflandBlog, uploadImageToWordPress } = require('./afland-publis
 const mongoUri = process.env.MONGO_URI;
 const dbName = process.env.DB_NAME || 'DuendeDB';
 const eventsCollectionName = 'events';
-const aflandToken = process.env.AFLAND_API_KEY;
+const aflandToken = process.env.WORDPRESS_APP_PASSWORD;
 const geminiApiKey = process.env.GEMINI_API_KEY;
 
 if (!mongoUri || !geminiApiKey || !aflandToken) {
