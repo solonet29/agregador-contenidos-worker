@@ -8,7 +8,7 @@ const { publishToAflandBlog, uploadImageToWordPress } = require('./afland-publis
 const { marked } = require('marked');
 
 // 2. Configuración
-const mongoUri = process.env.MONGO_URI;
+const mongoUri = process.env.MONGODB_URI;
 const dbName = process.env.DB_NAME || 'DuendeDB';
 const eventsCollectionName = 'events';
 const aflandToken = process.env.WORDPRESS_APP_PASSWORD;
