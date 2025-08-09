@@ -8,7 +8,7 @@ on:
     # Este cron se ejecuta todos los días a las 8:00 AM.
     # Puedes ajustar la hora si lo necesitas.
     - cron: '0 */8 * * *'
-    workflow_dispatch:
+  workflow_dispatch:
 jobs:
   run-script:
     # El entorno donde se ejecutará el trabajo
