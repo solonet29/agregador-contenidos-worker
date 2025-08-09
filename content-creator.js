@@ -11,7 +11,7 @@ const { marked } = require('marked');
 const mongoUri = process.env.MONGODB_URI;
 const dbName = process.env.DB_NAME || 'DuendeDB';
 const eventsCollectionName = 'events';
-const aflandToken = process.env.WORDPRESS_APP_PASSWORD;
+const aflandToken = process.env.AFLAND_API_KEY;
 const geminiApiKey = process.env.GEMINI_API_KEY;
 
 if (!mongoUri || !geminiApiKey || !aflandToken) {
