@@ -2,11 +2,11 @@
 name: Content Creator
 
 # Evento que dispara el flujo de trabajo
-# 'schedule' permite ejecutar el trabajo en un horario fijo usando cron
 on:
+  push:
+    branches:
+      - main
   schedule:
-    # Este cron se ejecuta todos los días a las 8:00 AM.
-    # Puedes ajustar la hora si lo necesitas.
     - cron: '0 */8 * * *'
   workflow_dispatch:
 jobs:
