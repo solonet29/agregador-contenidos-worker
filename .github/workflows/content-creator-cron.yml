@@ -30,14 +30,12 @@ jobs:
         run: npm install
 
       # Paso 4: Ejecutamos el script de Node.js
+      # ...
       - name: Run content creator script
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           DB_NAME: ${{ secrets.DB_NAME }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          WORDPRESS_URL: ${{ secrets.WORDPRESS_URL }}
-          WORDPRESS_USER: ${{ secrets.WORDPRESS_USER }}
-          WORDPRESS_APP_PASSWORD: ${{ secrets.WORDPRESS_APP_PASSWORD }}
-          AFLAND_API_KEY: ${{ secrets.AFLAND_API_KEY }}
+          AFLAND_API_KEY: ${{ secrets.AFLAND_API_KEY }} # <--- Usamos el nombre correcto
         run: node content-creator.js
         
