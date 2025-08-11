@@ -33,7 +33,7 @@ jobs:
       # ...
       - name: Run content creator script
         env:
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
           DB_NAME: ${{ secrets.DB_NAME }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           AFLAND_API_KEY: ${{ secrets.AFLAND_API_KEY }} # <--- Usamos el nombre correcto
