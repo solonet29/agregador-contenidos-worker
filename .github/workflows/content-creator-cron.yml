@@ -26,6 +26,10 @@ jobs:
       - name: Run Content Creator
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          WORDPRESS_URL: ${{ secrets.WORDPRESS_URL }}
+          WORDPRESS_USER: ${{ secrets.WORDPRESS_USER }}
+          WORDPRESS_APP_PASSWORD: ${{ secrets.WORDPRESS_APP_PASSWORD }}
           AFLAND_API_KEY: ${{ secrets.AFLAND_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           DAILY_TOKEN_LIMIT: 500000
