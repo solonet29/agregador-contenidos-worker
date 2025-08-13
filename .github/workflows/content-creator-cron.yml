@@ -1,41 +1,34 @@
-# Nombre del flujo de trabajo
+# .github/workflows/content-creator.yml
+
 name: Content Creator
 
-# Evento que dispara el flujo de trabajo
 on:
-  push:
-    branches:
-      - main
   schedule:
-    - cron: '0 */8 * * *'
+    # Ejecuta el flujo de trabajo cada dos horas
+    - cron: '0 */2 * * *' 
   workflow_dispatch:
-jobs:
-  run-script:
-    # El entorno donde se ejecutará el trabajo
-    runs-on: ubuntu-latest
 
+jobs:
+  run-content-creator:
+    runs-on: ubuntu-latest
     steps:
-      # Paso 1: Obtenemos el código del repositorio
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Paso 2: Configuramos el entorno de Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # Paso 3: Instalamos las dependencias
       - name: Install dependencies
         run: npm install
 
-      # Paso 4: Ejecutamos el script de Node.js
-      # ...
-      - name: Run content creator script
+      - name: Run Content Creator
         env:
           MONGO_URI: ${{ secrets.MONGO_URI }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          AFLAND_API_KEY: ${{ secrets.AFLAND_API_KEY }} # <--- Usamos el nombre correcto
+          AFLAND_API_KEY: ${{ secrets.AFLAND_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DAILY_TOKEN_LIMIT: 500000
+          GROQ_MODEL: 'llama3-8b-8192'
         run: node content-creator.js
         
