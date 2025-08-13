@@ -23,13 +23,15 @@ const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 // ... (Las funciones de utilidad y el prompt se mantienen igual) ...
 
+// ... (código anterior) ...
+
 async function generateStructuredPost(event) {
     const eventDateFormatted = new Date(event.date).toLocaleDateString('es-ES', {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
     });
     let extraContext = '';
     if (event.nightPlan && event.nightPlan.trim() !== '') {
-        console.log("   -> ✨ ¡Enriqueciendo post con datos de 'Planear Noche'!");
+        console.log("    -> ✨ ¡Enriqueciendo post con datos de 'Planear Noche'!");
         extraContext = `
 # INFORMACIÓN ADICIONAL PARA ENRIQUECER EL POST
 Usa la siguiente guía local para añadir secciones o detalles extra al cuerpo del post. Intégralo de forma natural.
@@ -41,43 +43,55 @@ ${event.nightPlan}
     // --- Lógica para la llamada a la acción (CTA) ---
     let callToAction;
     if (event.affiliateLink && event.affiliateLink.trim() !== '') {
-        // Si el evento tiene un enlace de afiliado, crea un enlace de compra
-        callToAction = `[Compra tus entradas aquí](${event.affiliateLink})`;
+        callToAction = `Entradas disponibles aquí: ${event.affiliateLink}`;
     } else {
-        // Si no, usa el texto de "Próximamente"
         callToAction = `Entradas disponibles próximamente.`;
     }
 
+    // --- AQUI ESTÁ EL NUEVO PROMPT INTEGRADO ---
     const prompt = `
 # CONTEXTO
 Eres "Duende", un experto redactor de SEO para el blog "Duende Finder" (afland.es). Tu objetivo es crear un post de blog atractivo sobre un evento de flamenco.
-# TONO
-Apasionado, evocador y accesible. Usa emojis 💃🎶🔥 de forma natural.
-# EVENTO A PROCESAR
+Tu tono es siempre apasionado, evocador y accesible. Usa emojis 💃🎶🔥 de forma natural.
+
+# INSTRUCCIONES PARA EL POST
+Crea un post para Duende Finder sobre un evento de flamenco. El post debe ser atractivo, informativo y optimizado para SEO, compensando la falta de imagen destacada con una estructura clara y un lenguaje evocador.
+
+# DATOS DEL EVENTO
 - Nombre: ${event.name}
 - Artista(s): ${event.artist}
 - Fecha: ${eventDateFormatted}
 - Hora: ${event.time}
 - Lugar: ${event.venue}, ${event.city}
+- URL de la fuente/compra de entradas: ${event.affiliateLink || 'No disponible'}
+- Descripción del evento: ${event.description || 'No se proporcionó una descripción del evento.'}
+
 ${extraContext}
+
 # TAREA Y REGLAS DE FORMATO
-Tu única salida debe ser texto estructurado con las siguientes secciones, separadas por "---".
+Tu única salida debe ser texto estructurado con las siguientes secciones, separadas por "---". Cada sección debe tener su etiqueta en la primera línea.
+
 SLUG:
-[Crea un slug corto y optimizado para SEO (4-5 palabras clave).]
+[Crea un slug corto, en minúsculas, sin acentos ni caracteres especiales, optimizado para SEO (4-5 palabras clave).]
 ---
 META_TITLE:
-[Crea un título SEO de menos de 60 caracteres.]
+[Crea un título SEO de menos de 60 caracteres que sea persuasivo y atractivo. Incluye la palabra clave principal y el nombre del artista o lugar.]
 ---
 META_DESC:
-[Crea una meta descripción de menos de 155 caracteres.]
+[Crea una meta descripción de menos de 155 caracteres. Incluye la palabra clave principal, un verbo de acción y una frase persuasiva.]
 ---
 POST_TITLE:
-[Crea un título H1 atractivo para el post.]
+[Crea un título H1 atractivo para el post, usando una estructura como "Concierto en [Ciudad]: [Título Atractivo]".]
 ---
 POST_CONTENT:
-[Escribe aquí el cuerpo del post en formato Markdown (300-400 palabras). Usa encabezados H2 (##). 
-${event.artist ? `Incluye un enlace interno al artista: [${event.artist}](/artistas/${event.artist.toLowerCase().replace(/ /g, '-')}).` : ''}
-Finaliza con una llamada a la acción para el usuario, que debe decir: "${callToAction}".]
+[Escribe aquí el cuerpo del post en formato Markdown (300-400 palabras). El post debe seguir esta estructura:
+1. **Introducción:** Un párrafo corto y vibrante (aprox. 50 palabras) que introduzca el evento, creando una atmósfera emocional.
+2. **Cuerpo del Contenido (2-3 Párrafos):** Explica en detalle sobre el artista, el palo que interpretará, la atmósfera del lugar y la historia del evento. Incorpora palabras clave secundarias (LSI) de forma natural (ej. cante, toque, baile, artistas flamencos, agenda flamenca).
+3. **Llamada a la Acción (CTA):** Un párrafo final o un subtítulo (H3) con el enlace de compra o el texto de "próximamente".
+
+Incluye el enlace a "Duende Finder" de forma natural en algún punto del texto, con el texto "todos los conciertos y eventos en nuestro buscador" y el enlace a https://buscador.afland.es/.
+
+Finaliza con la llamada a la acción para el usuario, que debe decir: "${callToAction}".]
 `;
     try {
         const result = await model.generateContent(prompt);
