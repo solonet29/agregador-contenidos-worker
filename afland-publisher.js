@@ -1,25 +1,66 @@
-// afland-publisher.js (Versión Corregida)
-
 require('dotenv').config();
 const axios = require('axios');
+// --- NUEVAS DEPENDENCIAS AÑADIDAS ---
+const fs = require('fs');
+const path = require('path');
+const FormData = require('form-data');
 
+
+// --- FUNCIÓN DE SUBIDA DE IMAGEN COMPLETAMENTE RECONSTRUIDA ---
 /**
- * Sube una imagen desde una URL a la mediateca de WordPress.
- * @param {string} imageUrl - La URL de la imagen a subir.
+ * Sube una imagen local a la mediateca de WordPress.
+ * @param {string} imagePath - La ruta local de la imagen a subir.
  * @param {string} appPassword - La contraseña de aplicación de WordPress.
  * @returns {number|null} El ID de la imagen subida, o null si falla.
  */
-async function uploadImageToWordPress(imageUrl, appPassword) {
-    if (!imageUrl) return null;
-    console.log(`🖼️ Intentando subir imagen: ${imageUrl}`);
-    
+async function uploadImageToWordPress(imagePath, appPassword) {
+    if (!imagePath) return null;
+
+    // Obtenemos las credenciales y la URL de la API desde el .env
+    const wpApiUrl = `${process.env.WORDPRESS_URL}/wp-json/wp/v2/media`;
+    const wpUser = process.env.WORDPRESS_USER;
+    const wpAuth = Buffer.from(`${wpUser}:${appPassword}`).toString('base64');
+
+    console.log(`🖼️  Intentando subir imagen: ${imagePath}`);
+
     try {
-        // Lógica para descargar la imagen y subirla a WordPress...
-        // ... (Esta parte la dejamos como la tenías, asumiendo que funciona)
-        // Si no funciona, necesitaremos la librería 'form-data'
-        return null; // Devolvemos null por ahora para no complicar el ejemplo
+        // 1. Leer el archivo de la imagen desde el disco
+        const fileBuffer = fs.readFileSync(imagePath);
+        const filename = path.basename(imagePath);
+
+        // 2. Crear un formulario de datos para la subida
+        const form = new FormData();
+        form.append('file', fileBuffer, { filename: filename });
+
+        // 3. Realizar la petición POST a la API de WordPress
+        const response = await axios.post(wpApiUrl, form, {
+            headers: {
+                'Authorization': `Basic ${wpAuth}`,
+                ...form.getHeaders() // Esto establece Content-Type a multipart/form-data
+            },
+            // Es importante para que axios no falle con archivos grandes
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
+        });
+
+        // 4. Si la subida es exitosa (código 201), devolvemos el ID de la imagen
+        if (response.status === 201) {
+            console.log(`✅ Imagen subida con éxito a WordPress. ID: ${response.data.id}`);
+            return response.data.id;
+        }
+        return null;
+
     } catch (error) {
-        console.error('❌ Error al subir la imagen a WordPress:', error.message);
+        // MEJORA CLAVE: Mostramos el error detallado que nos da WordPress
+        console.error('❌ Error al subir la imagen a WordPress:');
+        if (error.response) {
+            // El servidor respondió con un estado de error (4xx, 5xx)
+            console.error('   -> Status:', error.response.status);
+            console.error('   -> Data:', JSON.stringify(error.response.data, null, 2));
+        } else {
+            // Ocurrió un error en la propia petición (ej. red)
+            console.error('   -> Mensaje:', error.message);
+        }
         return null;
     }
 }
@@ -36,17 +77,15 @@ async function publishToAflandBlog(postData, appPassword, mediaId) {
     const wpUser = process.env.WORDPRESS_USER;
     const wpAuth = Buffer.from(`${wpUser}:${appPassword}`).toString('base64');
 
-    // Construimos el cuerpo de la petición desde el objeto 'postData'
     const payload = {
-    title: postData.title,
-    content: postData.content,
-    slug: postData.slug,
-    status: postData.status || 'publish',
-    categories: [ 96 ], // <-- Así, con el número 96
-    meta: postData.meta
-};
-    // Si la fecha de publicación está definida, la añadimos.
-    // Esta es la línea que fallaba antes. Ahora 'postData.date' sí existe.
+        title: postData.title,
+        content: postData.content,
+        slug: postData.slug,
+        status: postData.status || 'publish',
+        categories: [96],
+        meta: postData.meta
+    };
+
     if (postData.date) {
         payload.date_gmt = new Date(postData.date).toISOString();
     }
@@ -65,7 +104,7 @@ async function publishToAflandBlog(postData, appPassword, mediaId) {
             }
         });
 
-        if (response.status === 201) { // 201 significa "Created"
+        if (response.status === 201) {
             console.log('✅ Publicación enviada al blog con éxito.');
             console.log(`   -> URL: ${response.data.link}`);
         }
