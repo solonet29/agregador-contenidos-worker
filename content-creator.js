@@ -58,6 +58,8 @@ async function updateEventStatus(collection, eventId, status) {
     }
 }
 
+// REEMPLAZA ESTA FUNCIÓN EN content-creator.js
+
 async function createHeaderImage(eventData) {
     try {
         const templatesDir = path.join(__dirname, 'templates');
@@ -65,31 +67,50 @@ async function createHeaderImage(eventData) {
         if (!fs.existsSync(generatedImagesDir)) {
             fs.mkdirSync(generatedImagesDir, { recursive: true });
         }
+
         const fontPath = path.join(templatesDir, 'Cinzel-Bold.ttf');
         registerFont(fontPath, { family: 'Cinzel' });
+
         const templates = fs.readdirSync(templatesDir).filter(file => file.endsWith('.png'));
         const randomTemplateFile = templates[Math.floor(Math.random() * templates.length)];
         const templatePath = path.join(templatesDir, randomTemplateFile);
         const background = await loadImage(templatePath);
+
         const canvas = createCanvas(background.width, background.height);
         const ctx = canvas.getContext('2d');
+
+        // --- PASO ADICIONAL: PINTAR EL FONDO ---
+        // Establecemos un color de fondo sólido (un gris muy oscuro, casi negro)
+        ctx.fillStyle = '#2c2c2c';
+        // Rellenamos todo el lienzo con ese color
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // --- FIN DEL PASO ADICIONAL ---
+
+        // Ahora, dibujamos la plantilla (la barra morada) sobre nuestro nuevo fondo sólido
         ctx.drawImage(background, 0, 0, background.width, background.height);
-        const padding = 60;
-        ctx.fillStyle = 'white';
+
+        // Preparamos el color para el texto
+        ctx.fillStyle = 'white'; // Volvemos a poner el color blanco para las letras
         ctx.textAlign = 'center';
+
         ctx.font = '60px Cinzel';
         ctx.fillText(eventData.name, canvas.width / 2, canvas.height / 2);
+
         const dateText = new Date(eventData.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
         const locationText = `${eventData.venue}, ${eventData.city}`;
         const detailsText = `${dateText} | ${locationText}`;
+
         ctx.font = '24px Cinzel';
         ctx.fillText(detailsText, canvas.width / 2, canvas.height - padding);
+
         const outputFilename = `header-${eventData._id}.png`;
         const outputPath = path.join(generatedImagesDir, outputFilename);
         const buffer = canvas.toBuffer('image/png');
         fs.writeFileSync(outputPath, buffer);
+
         console.log(`✅ Imagen de cabecera creada con Canvas en: ${outputPath}`);
         return outputPath;
+
     } catch (error) {
         console.error("🔴 Error al crear la imagen de cabecera con Canvas:", error);
         return null;
@@ -175,15 +196,20 @@ async function runContentCreator() {
                 continue;
             }
 
+            // VERSIÓN CORREGIDA
             console.log(`⏳ Publicando post "${post_title}"...`);
+
             await publishToAflandBlog({
                 title: post_title,
                 content: htmlContent,
                 slug: slug,
                 status: 'publish',
-                featured_media: featuredMediaId,
-                meta: { _aioseo_title: meta_title, _aioseo_description: meta_desc }
-            }, aflandToken);
+                // El featured_media ya no es necesario aquí dentro...
+                meta: {
+                    _aioseo_title: meta_title,
+                    _aioseo_description: meta_desc
+                }
+            }, aflandToken, featuredMediaId); // <-- ...porque lo pasamos aquí, como tercer argumento
 
             await updateEventStatus(eventsCollection, event._id, 'processed');
         }
