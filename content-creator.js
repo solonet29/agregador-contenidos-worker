@@ -125,7 +125,7 @@ async function createHeaderImage(eventData) {
 
         // --- AJUSTES DE DISEÑO ---
         // 1. Definimos el ancho aproximado de tu barra morada para calcular el centro del área gris.
-        const purpleBarWidth = 260;
+        const purpleBarWidth = 290;
 
         // 2. Aumentamos el padding inferior para que el texto de los detalles suba un poco.
         const padding = 80;
@@ -145,7 +145,7 @@ async function createHeaderImage(eventData) {
         ctx.font = '60px Cinzel';
         // 3. CAMBIO EN EL CENTRADO: Calculamos el centro del área gris.
         const centerX = purpleBarWidth + (canvas.width - purpleBarWidth) / 2;
-        ctx.fillText(eventData.name, centerX, canvas.height / 2);
+        ctx.fillText(eventData.name, centerX, canvas.height / 2 - 30);
 
         // Detalles del evento
         const dateText = new Date(eventData.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
