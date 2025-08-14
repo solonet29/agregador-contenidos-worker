@@ -137,3 +137,6 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+# Ignorar carpetas de archivos generados y logs
+/generated_images/
+/npm-debug.log
