@@ -27,22 +27,66 @@ let tokensUsedToday = 0;
 
 // 3. Funciones de utilidad (sin cambios)
 async function generateStructuredPost(event) {
-    const eventDateFormatted = new Date(event.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const eventDateFormatted = new Date(event.date).toLocaleDateString('es-ES', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
     let extraContext = '';
     if (event.nightPlan && event.nightPlan.trim() !== '') {
-        extraContext = `# INFORMACIÓN ADICIONAL...\n${event.nightPlan}`;
+        extraContext = `
+# INFORMACIÓN ADICIONAL PARA ENRIQUECER EL POST
+Usa la siguiente guía local para añadir secciones o detalles extra al cuerpo del post. Intégralo de forma natural.
+Contenido Adicional:
+${event.nightPlan}
+`;
     }
-    const prompt = `...`; // El prompt largo no ha cambiado
+
+    const prompt = `
+# CONTEXTO
+Eres "Duende", un experto redactor de SEO para el blog "Duende Finder" (afland.es). Tu objetivo es crear el contenido para un post sobre un evento de flamenco.
+
+# INSTRUCCIONES PARA EL POST
+Tu única salida debe ser un objeto JSON válido, sin texto introductorio, explicaciones, ni envolturas de markdown. El objeto JSON debe contener estrictamente las siguientes propiedades: "slug", "meta_title", "meta_desc", "post_title", "post_content".
+
+# DATOS DEL EVENTO
+- Nombre: ${event.name}
+- Artista(s): ${event.artist}
+- Fecha: ${eventDateFormatted}
+- Hora: ${event.time}
+- Lugar: ${event.venue}, ${event.city}
+- URL de la fuente/compra de entradas: ${event.affiliateLink || 'No disponible'}
+- Descripción del evento: ${event.description || 'No se proporcionó una descripción del evento.'}
+
+${extraContext}
+
+# REGLAS DEL CONTENIDO
+- **slug:** Crea un slug corto, en minúsculas, sin acentos ni caracteres especiales, optimizado para SEO (4-5 palabras clave).
+- **meta_title:** Crea un título SEO de menos de 60 caracteres que sea persuasivo y atractivo.
+- **meta_desc:** Crea una meta descripción de menos de 155 caracteres.
+- **post_title:** Crea un título H1 atractivo para el post, usando una estructura como "Concierto en [Ciudad]: [Título Atractivo]".
+- **post_content:** Escribe el cuerpo del post en formato Markdown (300-400 palabras). Incluye una introducción vibrante, un desarrollo detallado sobre el artista y el evento, y una llamada a la acción clara. El enlace de "Duende Finder" (https://buscador.afland.es/) debe incluirse de forma natural en el texto con el ancla "todos los conciertos y eventos en nuestro buscador".
+`;
+
+    const estimatedTokens = prompt.length / 4;
+    if (tokensUsedToday + estimatedTokens > dailyTokenLimit) {
+        console.log("⚠️ Límite de tokens diarios alcanzado. Terminando la ejecución.");
+        return null;
+    }
+
     try {
         const result = await groq.chat.completions.create({
             model: groqModel,
             messages: [{ role: "user", content: prompt }],
             response_format: { type: "json_object" }
         });
+
         let content = result.choices[0].message.content;
+
         const cleanedContent = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+
         tokensUsedToday += result.usage.total_tokens;
+
         return cleanedContent;
+
     } catch (error) {
         console.error('❌ Error al generar contenido con Groq:', error);
         return null;
