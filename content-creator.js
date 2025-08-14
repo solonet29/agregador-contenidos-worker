@@ -272,5 +272,5 @@ async function runContentCreator() {
     }
 }
 
-// 5. Ejecución del script
+// 5. Ejecución del scripts
 runContentCreator();
