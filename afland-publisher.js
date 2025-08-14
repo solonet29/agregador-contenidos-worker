@@ -32,7 +32,7 @@ async function uploadImageToWordPress(imagePath, appPassword, altText, title) {
             },
             maxContentLength: Infinity,
             maxBodyLength: Infinity,
-            timeout: 30000
+            timeout: 30000 // Timeout para la subida de la imagen
         });
 
         if (response.status === 201) {
@@ -69,7 +69,9 @@ async function publishToAflandBlog(postData, appPassword, mediaId) {
                 'Authorization': `Basic ${wpAuth}`,
                 'Content-Type': 'application/json',
                 'User-Agent': BOT_USER_AGENT
-            }
+            },
+            // 🎉 Corrección: Añadimos un timeout para evitar el socket hang up
+            timeout: 45000
         });
 
         if (response.status === 201) {
