@@ -92,7 +92,7 @@ async function createHeaderImage(eventData) {
         // Preparamos el color para el texto
         ctx.fillStyle = 'white'; // Volvemos a poner el color blanco para las letras
         ctx.textAlign = 'center';
-
+        const padding = 60;
         ctx.font = '60px Cinzel';
         ctx.fillText(eventData.name, canvas.width / 2, canvas.height / 2);
 
