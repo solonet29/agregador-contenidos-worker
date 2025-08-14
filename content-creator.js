@@ -133,7 +133,7 @@ async function createHeaderImage(eventData) {
         const purpleBarWidth = 290;
         const titleVerticalOffset = -30;
         const detailsPaddingBottom = 80;
-        const horizontalPadding = 50;
+        const horizontalPadding = 100;
 
         ctx.fillStyle = '#2c2c2c';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
