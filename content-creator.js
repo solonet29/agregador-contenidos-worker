@@ -77,32 +77,21 @@ ${extraContext}
     }
 }
 
-async function updateEventStatus(collection, eventId, status) {
+async function updateEventStatus(collection, eventId, status, fieldsToSet = {}) {
     try {
-        await collection.updateOne({ _id: new ObjectId(eventId) }, { $set: { contentStatus: status } });
+        const updateDoc = { $set: { contentStatus: status, ...fieldsToSet } };
+        await collection.updateOne({ _id: new ObjectId(eventId) }, updateDoc);
         console.log(`🎉 Evento con ID: ${eventId} actualizado a estado: ${status}.`);
     } catch (error) {
         console.error(`❌ Error al actualizar el estado del evento ${eventId}:`, error);
     }
 }
 
-// --- FUNCIÓN AUXILIAR PARA ACORTAR TEXTO ---
-/**
- * Acorta un texto con "..." si excede un ancho máximo.
- * @param {CanvasRenderingContext2D} context - El contexto del canvas.
- * @param {string} text - El texto a acortar.
- * @param {number} maxWidth - El ancho máximo en píxeles.
- * @returns {string} El texto, acortado si es necesario.
- */
 function truncateText(context, text, maxWidth) {
     let width = context.measureText(text).width;
     const ellipsis = '...';
     const ellipsisWidth = context.measureText(ellipsis).width;
-
-    if (width <= maxWidth) {
-        return text;
-    }
-
+    if (width <= maxWidth) return text;
     let len = text.length;
     while (width >= maxWidth - ellipsisWidth && len-- > 0) {
         text = text.substring(0, len);
@@ -115,9 +104,7 @@ async function createHeaderImage(eventData) {
     try {
         const templatesDir = path.join(__dirname, 'templates');
         const generatedImagesDir = path.join(__dirname, 'generated_images');
-        if (!fs.existsSync(generatedImagesDir)) {
-            fs.mkdirSync(generatedImagesDir, { recursive: true });
-        }
+        if (!fs.existsSync(generatedImagesDir)) fs.mkdirSync(generatedImagesDir, { recursive: true });
 
         const fontPath = path.join(templatesDir, 'Cinzel-Bold.ttf');
         registerFont(fontPath, { family: 'Cinzel' });
@@ -130,10 +117,7 @@ async function createHeaderImage(eventData) {
         const canvas = createCanvas(background.width, background.height);
         const ctx = canvas.getContext('2d');
 
-        const purpleBarWidth = 290;
-        const titleVerticalOffset = -30;
-        const detailsPaddingBottom = 80;
-        const horizontalPadding = 100;
+        const purpleBarWidth = 290, titleVerticalOffset = -30, detailsPaddingBottom = 80, horizontalPadding = 100;
 
         ctx.fillStyle = '#2c2c2c';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -163,19 +147,16 @@ async function createHeaderImage(eventData) {
 
         console.log(`✅ Imagen de cabecera creada con Canvas en: ${outputPath}`);
         return outputPath;
-
     } catch (error) {
         console.error("🔴 Error al crear la imagen de cabecera con Canvas:", error);
         return null;
     }
 }
 
-// 4. Función principal del script (ARQUITECTURA DE LOTES)
+// 4. Función principal del script
 async function runContentCreator() {
     console.log('🚀 Iniciando creador de contenidos por lotes...');
-
     const BATCH_SIZE = 3;
-
     const client = new MongoClient(mongoUri);
 
     try {
@@ -190,13 +171,8 @@ async function runContentCreator() {
         const minDateString = twoDaysFromNow.toISOString().split('T')[0];
 
         const eventsToProcess = await eventsCollection.find({
-            contentStatus: 'pending',
-            imageUrl: { $ne: null },
-            date: { $gte: minDateString }
-        })
-            .sort({ verified: -1, date: 1 })
-            .limit(BATCH_SIZE)
-            .toArray();
+            contentStatus: 'pending', imageUrl: { $ne: null }, date: { $gte: minDateString }
+        }).sort({ verified: -1, date: 1 }).limit(BATCH_SIZE).toArray();
 
         if (eventsToProcess.length === 0) {
             console.log('✅ No hay eventos pendientes que cumplan los criterios en este lote.');
@@ -240,7 +216,13 @@ async function runContentCreator() {
             }
 
             const htmlContent = marked(post_content);
-            const featuredMediaId = await uploadImageToWordPress(headerImagePath, aflandToken);
+
+            // --> INICIO: LÓGICA COMBINADA DE URL Y SEO
+            const eventDateForSeo = new Date(event.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
+            const imageAltText = `Cartel del evento de ${event.artist} en ${event.venue}, ${event.city} el ${eventDateForSeo}`;
+            const imageTitle = `${event.artist} en ${event.city} - ${event.name}`;
+
+            const featuredMediaId = await uploadImageToWordPress(headerImagePath, aflandToken, imageAltText, imageTitle);
 
             if (!featuredMediaId) {
                 console.log('🔴 No se pudo subir la imagen. Revertiendo para reintentar.');
@@ -249,16 +231,23 @@ async function runContentCreator() {
             }
 
             console.log(`⏳ Publicando post "${post_title}"...`);
-            await publishToAflandBlog({
+
+            const publishResult = await publishToAflandBlog({
                 title: post_title,
                 content: htmlContent,
                 slug: slug,
                 status: 'publish',
-                featured_media: featuredMediaId,
                 meta: { _aioseo_title: meta_title, _aioseo_description: meta_desc }
-            }, aflandToken);
+            }, aflandToken, featuredMediaId);
 
-            await updateEventStatus(eventsCollection, event._id, 'processed');
+            let finalFieldsToSet = {};
+            if (publishResult && publishResult.finalImageUrl) {
+                finalFieldsToSet.headerImageUrl = publishResult.finalImageUrl;
+                console.log(`   -> ✅ URL de la imagen guardada en MongoDB.`);
+            }
+
+            await updateEventStatus(eventsCollection, event._id, 'processed', finalFieldsToSet);
+            // --> FIN: LÓGICA COMBINADA DE URL Y SEO
         }
 
     } catch (error) {
@@ -272,5 +261,5 @@ async function runContentCreator() {
     }
 }
 
-// 5. Ejecución del scripts
+// 5. Ejecución del script
 runContentCreator();
