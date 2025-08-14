@@ -25,19 +25,13 @@ if (!mongoUri || !groqApiKey || !aflandToken) {
 const groq = new Groq({ apiKey: groqApiKey });
 let tokensUsedToday = 0;
 
-// 3. Funciones de utilidad (sin cambios)
+// 3. Funciones de utilidad
+
 async function generateStructuredPost(event) {
-    const eventDateFormatted = new Date(event.date).toLocaleDateString('es-ES', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-    });
+    const eventDateFormatted = new Date(event.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     let extraContext = '';
     if (event.nightPlan && event.nightPlan.trim() !== '') {
-        extraContext = `
-# INFORMACIÓN ADICIONAL PARA ENRIQUECER EL POST
-Usa la siguiente guía local para añadir secciones o detalles extra al cuerpo del post. Intégralo de forma natural.
-Contenido Adicional:
-${event.nightPlan}
-`;
+        extraContext = `# INFORMACIÓN ADICIONAL PARA ENRIQUECER EL POST\nUsa la siguiente guía local...\nContenido Adicional:\n${event.nightPlan}`;
     }
 
     const prompt = `
@@ -66,12 +60,6 @@ ${extraContext}
 - **post_content:** Escribe el cuerpo del post en formato Markdown (300-400 palabras). Incluye una introducción vibrante, un desarrollo detallado sobre el artista y el evento, y una llamada a la acción clara. El enlace de "Duende Finder" (https://buscador.afland.es/) debe incluirse de forma natural en el texto con el ancla "todos los conciertos y eventos en nuestro buscador".
 `;
 
-    const estimatedTokens = prompt.length / 4;
-    if (tokensUsedToday + estimatedTokens > dailyTokenLimit) {
-        console.log("⚠️ Límite de tokens diarios alcanzado. Terminando la ejecución.");
-        return null;
-    }
-
     try {
         const result = await groq.chat.completions.create({
             model: groqModel,
@@ -80,13 +68,9 @@ ${extraContext}
         });
 
         let content = result.choices[0].message.content;
-
         const cleanedContent = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-
         tokensUsedToday += result.usage.total_tokens;
-
         return cleanedContent;
-
     } catch (error) {
         console.error('❌ Error al generar contenido con Groq:', error);
         return null;
@@ -102,7 +86,30 @@ async function updateEventStatus(collection, eventId, status) {
     }
 }
 
-// REEMPLAZA ESTA FUNCIÓN EN content-creator.js
+// --- FUNCIÓN AUXILIAR PARA ACORTAR TEXTO ---
+/**
+ * Acorta un texto con "..." si excede un ancho máximo.
+ * @param {CanvasRenderingContext2D} context - El contexto del canvas.
+ * @param {string} text - El texto a acortar.
+ * @param {number} maxWidth - El ancho máximo en píxeles.
+ * @returns {string} El texto, acortado si es necesario.
+ */
+function truncateText(context, text, maxWidth) {
+    let width = context.measureText(text).width;
+    const ellipsis = '...';
+    const ellipsisWidth = context.measureText(ellipsis).width;
+
+    if (width <= maxWidth) {
+        return text;
+    }
+
+    let len = text.length;
+    while (width >= maxWidth - ellipsisWidth && len-- > 0) {
+        text = text.substring(0, len);
+        width = context.measureText(text).width;
+    }
+    return text + ellipsis;
+}
 
 async function createHeaderImage(eventData) {
     try {
@@ -123,38 +130,31 @@ async function createHeaderImage(eventData) {
         const canvas = createCanvas(background.width, background.height);
         const ctx = canvas.getContext('2d');
 
-        // --- AJUSTES DE DISEÑO ---
-        // 1. Definimos el ancho aproximado de tu barra morada para calcular el centro del área gris.
         const purpleBarWidth = 290;
+        const titleVerticalOffset = -30;
+        const detailsPaddingBottom = 80;
+        const horizontalPadding = 50;
 
-        // 2. Aumentamos el padding inferior para que el texto de los detalles suba un poco.
-        const padding = 80;
-
-        // Pintamos el fondo sólido
         ctx.fillStyle = '#2c2c2c';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Dibujamos la plantilla encima
         ctx.drawImage(background, 0, 0, background.width, background.height);
 
-        // Preparamos el color y la alineación para el texto
         ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
 
-        // Título principal
         ctx.font = '60px Cinzel';
-        // 3. CAMBIO EN EL CENTRADO: Calculamos el centro del área gris.
         const centerX = purpleBarWidth + (canvas.width - purpleBarWidth) / 2;
-        ctx.fillText(eventData.name, centerX, canvas.height / 2 - 30);
+        const maxWidth = canvas.width - purpleBarWidth - (horizontalPadding * 2);
 
-        // Detalles del evento
+        const titleText = truncateText(ctx, eventData.name.toUpperCase(), maxWidth);
+        ctx.fillText(titleText, centerX, (canvas.height / 2) + titleVerticalOffset);
+
         const dateText = new Date(eventData.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
         const locationText = `${eventData.venue}, ${eventData.city}`;
         const detailsText = `${dateText} | ${locationText}`;
 
-        // 4. CAMBIO EN EL TAMAÑO: Aumentamos la fuente de 24px a 28px.
         ctx.font = '28px Cinzel';
-        ctx.fillText(detailsText, centerX, canvas.height - padding);
+        ctx.fillText(detailsText, centerX, canvas.height - detailsPaddingBottom);
 
         const outputFilename = `header-${eventData._id}.png`;
         const outputPath = path.join(generatedImagesDir, outputFilename);
@@ -174,8 +174,7 @@ async function createHeaderImage(eventData) {
 async function runContentCreator() {
     console.log('🚀 Iniciando creador de contenidos por lotes...');
 
-    // --- LÍNEA CLAVE: Definimos el tamaño del lote ---
-    const BATCH_SIZE = 3; // Procesará un máximo de 3 eventos por ejecución. ¡Puedes ajustar este número!
+    const BATCH_SIZE = 3;
 
     const client = new MongoClient(mongoUri);
 
@@ -249,20 +248,15 @@ async function runContentCreator() {
                 continue;
             }
 
-            // VERSIÓN CORREGIDA
             console.log(`⏳ Publicando post "${post_title}"...`);
-
             await publishToAflandBlog({
                 title: post_title,
                 content: htmlContent,
                 slug: slug,
                 status: 'publish',
-                // El featured_media ya no es necesario aquí dentro...
-                meta: {
-                    _aioseo_title: meta_title,
-                    _aioseo_description: meta_desc
-                }
-            }, aflandToken, featuredMediaId); // <-- ...porque lo pasamos aquí, como tercer argumento
+                featured_media: featuredMediaId,
+                meta: { _aioseo_title: meta_title, _aioseo_description: meta_desc }
+            }, aflandToken);
 
             await updateEventStatus(eventsCollection, event._id, 'processed');
         }
