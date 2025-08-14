@@ -123,29 +123,38 @@ async function createHeaderImage(eventData) {
         const canvas = createCanvas(background.width, background.height);
         const ctx = canvas.getContext('2d');
 
-        // --- PASO ADICIONAL: PINTAR EL FONDO ---
-        // Establecemos un color de fondo sólido (un gris muy oscuro, casi negro)
-        ctx.fillStyle = '#2c2c2c';
-        // Rellenamos todo el lienzo con ese color
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // --- FIN DEL PASO ADICIONAL ---
+        // --- AJUSTES DE DISEÑO ---
+        // 1. Definimos el ancho aproximado de tu barra morada para calcular el centro del área gris.
+        const purpleBarWidth = 260;
 
-        // Ahora, dibujamos la plantilla (la barra morada) sobre nuestro nuevo fondo sólido
+        // 2. Aumentamos el padding inferior para que el texto de los detalles suba un poco.
+        const padding = 80;
+
+        // Pintamos el fondo sólido
+        ctx.fillStyle = '#2c2c2c';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Dibujamos la plantilla encima
         ctx.drawImage(background, 0, 0, background.width, background.height);
 
-        // Preparamos el color para el texto
-        ctx.fillStyle = 'white'; // Volvemos a poner el color blanco para las letras
+        // Preparamos el color y la alineación para el texto
+        ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
-        const padding = 60;
-        ctx.font = '60px Cinzel';
-        ctx.fillText(eventData.name, canvas.width / 2, canvas.height / 2);
 
+        // Título principal
+        ctx.font = '60px Cinzel';
+        // 3. CAMBIO EN EL CENTRADO: Calculamos el centro del área gris.
+        const centerX = purpleBarWidth + (canvas.width - purpleBarWidth) / 2;
+        ctx.fillText(eventData.name, centerX, canvas.height / 2);
+
+        // Detalles del evento
         const dateText = new Date(eventData.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
         const locationText = `${eventData.venue}, ${eventData.city}`;
         const detailsText = `${dateText} | ${locationText}`;
 
-        ctx.font = '24px Cinzel';
-        ctx.fillText(detailsText, canvas.width / 2, canvas.height - padding);
+        // 4. CAMBIO EN EL TAMAÑO: Aumentamos la fuente de 24px a 28px.
+        ctx.font = '28px Cinzel';
+        ctx.fillText(detailsText, centerX, canvas.height - padding);
 
         const outputFilename = `header-${eventData._id}.png`;
         const outputPath = path.join(generatedImagesDir, outputFilename);
