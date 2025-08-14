@@ -1,3 +1,4 @@
+// afland-publisher.js
 require('dotenv').config();
 const axios = require('axios');
 const fs = require('fs');
@@ -26,12 +27,12 @@ async function uploadImageToWordPress(imagePath, appPassword, altText, title) {
         const response = await axios.post(wpApiUrl, form, {
             headers: {
                 'Authorization': `Basic ${wpAuth}`,
-                'User-Agent': BOT_USER_AGENT, // <-- AÑADIDO User-Agent aquí
+                'User-Agent': BOT_USER_AGENT,
                 ...form.getHeaders()
             },
             maxContentLength: Infinity,
             maxBodyLength: Infinity,
-            timeout: 30000 // Aumentamos a 30 segundos por si acaso
+            timeout: 30000
         });
 
         if (response.status === 201) {
@@ -67,7 +68,7 @@ async function publishToAflandBlog(postData, appPassword, mediaId) {
             headers: {
                 'Authorization': `Basic ${wpAuth}`,
                 'Content-Type': 'application/json',
-                'User-Agent': BOT_USER_AGENT // <-- ASEGURADO que el User-Agent está aquí
+                'User-Agent': BOT_USER_AGENT
             }
         });
 
