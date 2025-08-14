@@ -1,4 +1,4 @@
-// content-creator.js (v10 - Versión para Groq con Control de Cuota)
+// content-creator.js (v13 - Versión final con generación de imágenes)
 
 // 1. Módulos y dependencias
 require('dotenv').config();
@@ -6,6 +6,12 @@ const { MongoClient, ObjectId } = require('mongodb');
 const Groq = require('groq-sdk');
 const { publishToAflandBlog, uploadImageToWordPress } = require('./afland-publisher');
 const { marked } = require('marked');
+
+// --- NUEVOS MÓDULOS PARA GENERACIÓN DE IMÁGENES ---
+const Jimp = require('jimp');
+const path = require('path');
+const fs = require('fs');
+// --- FIN NUEVOS MÓDULOS ---
 
 // 2. Configuración
 const mongoUri = process.env.MONGO_URI;
@@ -114,6 +120,72 @@ async function updateEventStatus(collection, eventId, status) {
     }
 }
 
+// --- NUEVA FUNCIÓN PARA CREAR IMAGEN DE CABECERA CON JIMPA ---
+async function createHeaderImage(eventData) {
+    try {
+        const generatedImagesDir = path.join(__dirname, 'generated_images');
+        if (!fs.existsSync(generatedImagesDir)) {
+            fs.mkdirSync(generatedImagesDir);
+        }
+
+        const templatesDir = path.join(__dirname, 'templates');
+
+        const templates = fs.readdirSync(templatesDir).filter(file => file.endsWith('.png'));
+        if (templates.length === 0) {
+            console.error('No se encontraron archivos .png en la carpeta de plantillas.');
+            return null;
+        }
+        const randomTemplateFile = templates[Math.floor(Math.random() * templates.length)];
+        const templatePath = path.join(templatesDir, randomTemplateFile);
+
+        const fontTitle = await Jimp.loadFont(path.join(__dirname, 'templates', 'Cinzel-Bold.ttf'));
+        const fontDetails = await Jimp.loadFont(Jimp.FONT_SANS_16_WHITE);
+
+        const image = await Jimp.read(templatePath);
+        const imageWidth = image.getWidth();
+        const imageHeight = image.getHeight();
+
+        const titleText = eventData.name;
+        const dateText = `Fecha: ${eventData.date}`;
+        const timeText = `Hora: ${eventData.time}`;
+        const locationText = `Lugar: ${eventData.venue}, ${eventData.city}`;
+
+        image.print(fontTitle, 0, 0, {
+            text: titleText,
+            alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+            alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+        }, imageWidth, imageHeight);
+
+        image.print(fontDetails, imageWidth / 2, imageHeight * 0.7, {
+            text: dateText,
+            alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER
+        }, imageWidth / 2, 50);
+
+        image.print(fontDetails, imageWidth / 2, imageHeight * 0.7 + 25, {
+            text: timeText,
+            alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER
+        }, imageWidth / 2, 50);
+
+        image.print(fontDetails, imageWidth / 2, imageHeight * 0.8, {
+            text: locationText,
+            alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER
+        }, imageWidth / 2, 50);
+
+        const outputFilename = `header-${eventData._id}.png`;
+        const outputPath = path.join(generatedImagesDir, outputFilename);
+
+        await image.writeAsync(outputPath);
+
+        console.log(`Imagen de cabecera creada en: ${outputPath}`);
+        return outputPath;
+
+    } catch (error) {
+        console.error("Error al crear la imagen de cabecera:", error);
+        return null;
+    }
+}
+// --- FIN NUEVA FUNCIÓN ---
+
 // 4. Función principal del script
 async function runContentCreator() {
     console.log('🚀 Iniciando creador de contenidos con Groq y control de cuota.');
@@ -149,6 +221,15 @@ async function runContentCreator() {
 
             console.log(`\n✨ Procesando evento con ID: ${eventToProcess._id}`);
 
+            // --- NUEVO PASO: GENERAR IMAGEN DE CABECERA ---
+            const headerImagePath = await createHeaderImage(eventToProcess);
+            if (!headerImagePath) {
+                console.log('🔴 No se pudo crear la imagen de cabecera. Revertiendo estado.');
+                await updateEventStatus(eventsCollection, eventToProcess._id, 'pending');
+                continue;
+            }
+            // --- FIN NUEVO PASO ---
+
             const structuredPost = await generateStructuredPost(eventToProcess);
 
             if (!structuredPost) {
@@ -165,7 +246,7 @@ async function runContentCreator() {
             } catch (jsonError) {
                 console.error('🔴 Error al parsear la respuesta JSON de Groq:', jsonError);
                 await updateEventStatus(eventsCollection, eventToProcess._id, 'failed');
-                continue; // Pasa al siguiente evento del bucle
+                continue;
             }
 
             const { slug, meta_title, meta_desc, post_title, post_content } = parsedPost;
@@ -177,10 +258,10 @@ async function runContentCreator() {
             }
 
             const htmlContent = marked(post_content);
-            let featuredMediaId = null;
-            if (eventToProcess.imageUrl) {
-                featuredMediaId = await uploadImageToWordPress(eventToProcess.imageUrl, aflandToken);
-            }
+
+            // --- CAMBIO CLAVE: SUBIR LA IMAGEN GENERADA Y OBTENER SU ID ---
+            const featuredMediaId = await uploadImageToWordPress(headerImagePath, aflandToken);
+            // --- FIN CAMBIO CLAVE ---
 
             console.log(`⏳ Publicando post "${post_title}"...`);
 
@@ -189,7 +270,7 @@ async function runContentCreator() {
                 title: post_title,
                 content: htmlContent,
                 slug: slug,
-                status: 'publish', // <-- CAMBIO CLAVE: Publicación inmediata
+                status: 'publish',
                 meta: {
                     _aioseo_title: meta_title,
                     _aioseo_description: meta_desc
