@@ -7,7 +7,13 @@ const { publishToAflandBlog, uploadImageToWordPress } = require('./afland-publis
 const { marked } = require('marked');
 const path = require('path');
 const fs = require('fs');
-
+// --- POOL DE ENLACES INTERNOS PARA SEO ---
+const INTERNAL_LINKS = [
+    { url: 'https://afland.es/', anchor: 'nuestra página principal sobre flamenco' },
+    { url: 'https://afland.es/noticias/', anchor: 'noticias de flamenco' },
+    { url: 'https://afland.es/viajes-y-rutas/', anchor: 'viajes flamencos' },
+];
+// --- FIN DEL POOL ---
 // 2. Configuración desde variables de entorno
 const mongoUri = process.env.MONGO_URI;
 const groqApiKey = process.env.GROQ_API_KEY;
@@ -215,6 +221,8 @@ async function runContentCreator() {
 
         console.log(`📦 Lote de ${eventsToProcess.length} eventos encontrado. Empezando procesamiento...`);
 
+        // En content-creator.js, reemplaza el bucle 'for' completo
+
         for (const event of eventsToProcess) {
             await updateEventStatus(eventsCollection, event._id, 'processing');
             console.log(`\n✨ Procesando evento con ID: ${event._id}`);
@@ -251,10 +259,10 @@ async function runContentCreator() {
 
             const htmlContent = marked(post_content);
 
-            // --> INICIO: LÓGICA COMBINADA DE URL Y SEO
+            // --- LÓGICA CORREGIDA ---
             const eventDateForSeo = new Date(event.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
-            const imageAltText = `Cartel del evento de ${event.artist} en ${event.venue}, ${event.city} el ${eventDateForSeo}`;
-            const imageTitle = `${event.artist} en ${event.city} - ${event.name}`;
+            const imageAltText = `Cartel del evento de ${event.artist.name} en ${event.venue}, ${event.city} el ${eventDateForSeo}`;
+            const imageTitle = `${event.artist.name} en ${event.city} - ${event.name}`;
 
             const featuredMediaId = await uploadImageToWordPress(headerImagePath, aflandToken, imageAltText, imageTitle);
 
@@ -281,7 +289,6 @@ async function runContentCreator() {
             }
 
             await updateEventStatus(eventsCollection, event._id, 'processed', finalFieldsToSet);
-            // --> FIN: LÓGICA COMBINADA DE URL Y SEO
         }
 
     } catch (error) {
