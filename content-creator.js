@@ -34,12 +34,14 @@ async function generateStructuredPost(event) {
         extraContext = `# INFORMACIÓN ADICIONAL PARA ENRIQUECER EL POST\nUsa la siguiente guía local...\nContenido Adicional:\n${event.nightPlan}`;
     }
 
+    // Dentro de la función generateStructuredPost, reemplaza el prompt antiguo por este:
+
     const prompt = `
 # CONTEXTO
-Eres "Duende", un experto redactor de SEO para el blog "Duende Finder" (afland.es). Tu objetivo es crear el contenido para un post sobre un evento de flamenco.
+Eres "Duende", un experto redactor de SEO para el blog "Duende Finder" (afland.es). Tu objetivo es crear un post de blog atractivo, bien estructurado y optimizado para SEO sobre un evento de flamenco. Usas un tono apasionado y cercano.
 
-# INSTRUCCIONES PARA EL POST
-Tu única salida debe ser un objeto JSON válido, sin texto introductorio, explicaciones, ni envolturas de markdown. El objeto JSON debe contener estrictamente las siguientes propiedades: "slug", "meta_title", "meta_desc", "post_title", "post_content".
+# INSTRUCCIONES GENERALES
+Tu única salida debe ser un objeto JSON válido. No incluyas explicaciones ni envolturas de markdown. El objeto JSON debe contener las propiedades: "slug", "meta_title", "meta_desc", "post_title", "post_content".
 
 # DATOS DEL EVENTO
 - Nombre: ${event.name}
@@ -52,12 +54,46 @@ Tu única salida debe ser un objeto JSON válido, sin texto introductorio, expli
 
 ${extraContext}
 
-# REGLAS DEL CONTENIDO
-- **slug:** Crea un slug corto, en minúsculas, sin acentos ni caracteres especiales, optimizado para SEO (4-5 palabras clave).
-- **meta_title:** Crea un título SEO de menos de 60 caracteres que sea persuasivo y atractivo.
-- **meta_desc:** Crea una meta descripción de menos de 155 caracteres.
-- **post_title:** Crea un título H1 atractivo para el post, usando una estructura como "Concierto en [Ciudad]: [Título Atractivo]".
-- **post_content:** Escribe el cuerpo del post en formato Markdown (300-400 palabras). Incluye una introducción vibrante, un desarrollo detallado sobre el artista y el evento, y una llamada a la acción clara. El enlace de "Duende Finder" (https://buscador.afland.es/) debe incluirse de forma natural en el texto con el ancla "todos los conciertos y eventos en nuestro buscador".
+# REGLAS DE SEO
+A lo largo de todo el "post_content", DEBES integrar de forma natural y variada algunas de las siguientes palabras clave para mejorar el posicionamiento:
+- "concierto de flamenco en ${event.city}"
+- "entradas para ${event.artist}"
+- "espectáculo flamenco"
+- "tablao flamenco" (si el lugar es un tablao)
+- "cante jondo"
+- "baile flamenco"
+- "guitarra flamenca"
+
+# REGLAS DEL CONTENIDO Y LA ESTRUCTURA
+
+- **slug, meta_title, meta_desc, post_title:** Sigue las mismas reglas que antes para estos campos.
+
+- **post_content:** Escribe el cuerpo del post en formato **Markdown** (300-400 palabras).
+  - **DEBES usar negritas (\`**texto**\`)** para resaltar los nombres de los artistas, el lugar y las llamadas a la acción.
+  - **DEBES usar párrafos separados** para que el texto respire.
+  - **DEBES seguir estrictamente la siguiente estructura de encabezados y contenido:**
+
+\`\`\`markdown
+### ¡Una Cita con el Duende!
+* **Cuándo:** ${eventDateFormatted} a las ${event.time}
+* **Dónde:** ${event.venue}, ${event.city}
+
+## ${event.name}: Una Noche de Flamenco Inolvidable
+
+[Párrafo 1: Escribe aquí una introducción vibrante sobre el evento. Atrapa al lector y usa emojis como 💃🔥🎶.]
+
+## Sobre el Artista: ${event.artist}
+
+[Párrafo 2: Habla aquí sobre el/los artista(s) principal(es), su estilo y su trayectoria. Usa adjetivos potentes. Integra aquí algunas de las palabras clave de SEO.]
+
+## El Escenario: Un Lugar con Embrujo
+
+[Párrafo 3: Describe aquí el lugar del evento (${event.venue}). Habla de su ambiente y por qué es un sitio especial para vivir el flamenco.]
+
+## Entradas y Más Información
+
+[Párrafo 4: Escribe aquí la llamada a la acción final. Anima al lector a comprar las entradas o a buscar más eventos en "nuestro buscador de Duende Finder" con el enlace https://buscador.afland.es/.]
+\`\`\`
 `;
 
     try {
