@@ -36,16 +36,19 @@ async function generateStructuredPost(event) {
 
     // Dentro de la función generateStructuredPost, reemplaza el prompt antiguo por este:
 
+    // En content-creator.js, dentro de generateStructuredPost
+
     const prompt = `
 # CONTEXTO
-Eres "Duende", un experto redactor de SEO para el blog "Duende Finder" (afland.es). Tu objetivo es crear un post de blog atractivo, bien estructurado y optimizado para SEO sobre un evento de flamenco. Usas un tono apasionado y cercano.
+Eres "Duende", un experto redactor de SEO para el blog "Duende Finder" (afland.es). Tu objetivo es crear un post de blog atractivo, bien estructurado y optimizado para SEO sobre un evento de flamenco, siendo preciso y adaptándote a la información disponible del artista.
 
 # INSTRUCCIONES GENERALES
 Tu única salida debe ser un objeto JSON válido. No incluyas explicaciones ni envolturas de markdown. El objeto JSON debe contener las propiedades: "slug", "meta_title", "meta_desc", "post_title", "post_content".
 
 # DATOS DEL EVENTO
 - Nombre: ${event.name}
-- Artista(s): ${event.artist}
+- Artista(s): ${event.artist.name}
+- Disciplina: ${event.artist.discipline || 'Artista de Flamenco'} 
 - Fecha: ${eventDateFormatted}
 - Hora: ${event.time}
 - Lugar: ${event.venue}, ${event.city}
@@ -55,23 +58,18 @@ Tu única salida debe ser un objeto JSON válido. No incluyas explicaciones ni e
 ${extraContext}
 
 # REGLAS DE SEO
-A lo largo de todo el "post_content", DEBES integrar de forma natural y variada algunas de las siguientes palabras clave para mejorar el posicionamiento:
+A lo largo de todo el "post_content", integra de forma natural y variada algunas de las siguientes palabras clave:
 - "concierto de flamenco en ${event.city}"
-- "entradas para ${event.artist}"
+- "entradas para ${event.artist.name}"
 - "espectáculo flamenco"
-- "tablao flamenco" (si el lugar es un tablao)
-- "cante jondo"
-- "baile flamenco"
-- "guitarra flamenca"
+- "duende flamenco"
+- "arte flamenco"
 
 # REGLAS DEL CONTENIDO Y LA ESTRUCTURA
 
 - **slug, meta_title, meta_desc, post_title:** Sigue las mismas reglas que antes para estos campos.
 
-- **post_content:** Escribe el cuerpo del post en formato **Markdown** (300-400 palabras).
-  - **DEBES usar negritas (\`**texto**\`)** para resaltar los nombres de los artistas, el lugar y las llamadas a la acción.
-  - **DEBES usar párrafos separados** para que el texto respire.
-  - **DEBES seguir estrictamente la siguiente estructura de encabezados y contenido:**
+- **post_content:** Escribe el cuerpo del post en formato **Markdown** (300-400 palabras), usando negritas y párrafos separados. **DEBES seguir estrictamente la siguiente estructura:**
 
 \`\`\`markdown
 ### ¡Una Cita con el Duende!
@@ -82,9 +80,9 @@ A lo largo de todo el "post_content", DEBES integrar de forma natural y variada 
 
 [Párrafo 1: Escribe aquí una introducción vibrante sobre el evento. Atrapa al lector y usa emojis como 💃🔥🎶.]
 
-## Sobre el Artista: ${event.artist}
+## Sobre el Artista: ${event.artist.name}
 
-[Párrafo 2: Habla aquí sobre el/los artista(s) principal(es), su estilo y su trayectoria. Usa adjetivos potentes. Integra aquí algunas de las palabras clave de SEO.]
+[Párrafo 2: Habla sobre ${event.artist.name}. **IMPORTANTE: Si el campo 'Disciplina' contiene un valor específico (como 'Cantaor', 'Guitarrista', 'Bailaor'), céntrate en describir su arte en esa disciplina concreta. Si el campo 'Disciplina' es el genérico 'Artista de Flamenco', entonces describe su talento de forma más general y evocadora, usando términos como 'duende flamenco', 'flamencura', 'pellizco' o 'arte', sin especificar si canta, baila o toca.**]
 
 ## El Escenario: Un Lugar con Embrujo
 
