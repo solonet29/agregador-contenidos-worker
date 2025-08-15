@@ -117,7 +117,7 @@ async function createHeaderImage(eventData) {
         const canvas = createCanvas(background.width, background.height);
         const ctx = canvas.getContext('2d');
 
-        const purpleBarWidth = 290, titleVerticalOffset = -30, detailsPaddingBottom = 80, horizontalPadding = 100;
+        const purpleBarWidth = 290, titleVerticalOffset = -30, detailsPaddingBottom = 120, horizontalPadding = 100;
 
         ctx.fillStyle = '#2c2c2c';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -137,7 +137,7 @@ async function createHeaderImage(eventData) {
         const locationText = `${eventData.venue}, ${eventData.city}`;
         const detailsText = `${dateText} | ${locationText}`;
 
-        ctx.font = '28px Cinzel';
+        ctx.font = '40px Cinzel';
         ctx.fillText(detailsText, centerX, canvas.height - detailsPaddingBottom);
 
         const outputFilename = `header-${eventData._id}.png`;
