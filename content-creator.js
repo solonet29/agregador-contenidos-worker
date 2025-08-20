@@ -75,7 +75,7 @@ A lo largo de todo el "post_content", integra de forma natural y variada algunas
 
 - **slug, meta_title, meta_desc, post_title:** Sigue las mismas reglas que antes para estos campos.
 
-- **post_content:** Escribe el cuerpo del post en formato **Markdown** (300-400 palabras), usando negritas y párrafos separados. **DEBES seguir estrictamente la siguiente estructura:**
+- **post_content:** Escribe el cuerpo del post en formato **Markdown** (300-400 palabras), usando negritas y párrafos separados. **IMPORTANTE: Escapa todas las comillas dobles (") con una barra invertida (\") dentro del campo post_content para asegurar que el JSON sea válido.** DEBES seguir estrictamente la siguiente estructura:
 
 \
 ### ¡Una Cita con el Duende!
