@@ -2,6 +2,7 @@
 require('dotenv').config();
 const { MongoClient, ObjectId } = require('mongodb');
 const Groq = require('groq-sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { createCanvas, loadImage, registerFont } = require('canvas');
 const { publishToAflandBlog, uploadImageToWordPress, downloadImage } = require('./afland-publisher');
 const { marked } = require('marked');
@@ -21,19 +22,25 @@ const INTERNAL_LINKS = [
 // 2. Configuración desde variables de entorno
 const mongoUri = process.env.MONGO_URI;
 const groqApiKey = process.env.GROQ_API_KEY;
+const geminiApiKey = process.env.GEMINI_API_KEY;
 const aflandToken = process.env.AFLAND_API_KEY;
 const dbName = 'DuendeDB';
 const eventsCollectionName = 'events';
 
-const dailyTokenLimit = parseInt(process.env.DAILY_TOKEN_LIMIT) || 500000;
 const groqModel = process.env.GROQ_MODEL || 'llama3-8b-8192';
 
-if (!mongoUri || !groqApiKey || !aflandToken) {
-    throw new Error('Faltan variables de entorno críticas. Revisa tus secretos de GitHub Actions.');
+if (!mongoUri || !groqApiKey || !aflandToken || !geminiApiKey) {
+    throw new Error('Faltan variables de entorno críticas. Revisa tus secretos de GitHub Actions (MONGO_URI, GROQ_API_KEY, GEMINI_API_KEY, AFLAND_API_KEY).');
 }
 
+// Inicialización de clientes de IA
 const groq = new Groq({ apiKey: groqApiKey });
-let tokensUsedToday = 0;
+const genAI = new GoogleGenerativeAI(geminiApiKey);
+const geminiModel = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    generationConfig: { responseMimeType: "application/json" }
+});
+
 
 // 3. Funciones de utilidad
 
@@ -45,19 +52,14 @@ async function extractFromSourceURL(url) {
         const { data } = await axios.get(url, { timeout: 10000 });
         const $ = cheerio.load(data);
 
-        // Prioridad 1: Open Graph Image
         let imageUrl = $('meta[property="og:image"]').attr('content');
-
-        // Prioridad 2: La imagen más grande del cuerpo del post (si no hay og:image)
         if (!imageUrl) {
             let maxArea = 0;
             $('body img').each((i, element) => {
                 const img = $(element);
-                // Intenta obtener dimensiones de atributos, ya que el renderizado no ocurre
                 const width = parseInt(img.attr('width')) || img.width() || 0;
                 const height = parseInt(img.attr('height')) || img.height() || 0;
                 const area = width * height;
-
                 if (area > maxArea) {
                     maxArea = area;
                     imageUrl = img.attr('src');
@@ -65,7 +67,6 @@ async function extractFromSourceURL(url) {
             });
         }
         
-        // Asegurarse de que la URL de la imagen sea absoluta
         if (imageUrl) {
             try {
                 imageUrl = new URL(imageUrl, url).href;
@@ -75,7 +76,6 @@ async function extractFromSourceURL(url) {
             }
         }
 
-        // Extraer contexto de párrafos
         let context = '';
         $('p').each((i, element) => {
             const paragraph = $(element).text().trim();
@@ -91,8 +91,7 @@ async function extractFromSourceURL(url) {
     }
 }
 
-
-async function generateStructuredPost(event, externalContext = '') {
+function getPrompt(event, externalContext = '') {
     const eventDateFormatted = new Date(event.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     
     let extraContext = '';
@@ -103,7 +102,7 @@ async function generateStructuredPost(event, externalContext = '') {
         extraContext += `\n\n# CONTEXTO EXTRAÍDO DE LA FUENTE ORIGINAL\n${externalContext}`;
     }
 
-    const prompt = `
+    return `
 # CONTEXTO
 Eres "Duende", un experto redactor de SEO para el blog "Duende Finder" (afland.es). Tu objetivo es crear un post de blog atractivo, bien estructurado y optimizado para SEO sobre un evento de flamenco, siendo preciso y adaptándote a la información disponible del artista.
 
@@ -157,20 +156,31 @@ A lo largo de todo el "post_content", integra de forma natural y variada algunas
 \
 
 `;
+}
 
+async function generateWithGroq(event, externalContext) {
+    const prompt = getPrompt(event, externalContext);
     try {
         const result = await groq.chat.completions.create({
             model: groqModel,
             messages: [{ role: "user", content: prompt }],
             response_format: { type: "json_object" }
         });
-
-        let content = result.choices[0].message.content;
-        const cleanedContent = content.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        tokensUsedToday += result.usage.total_tokens;
-        return cleanedContent;
+        return result.choices[0].message.content;
     } catch (error) {
         console.error('❌ Error al generar contenido con Groq:', error);
+        return null;
+    }
+}
+
+async function generateWithGemini(event, externalContext) {
+    const prompt = getPrompt(event, externalContext);
+    try {
+        const result = await geminiModel.generateContent(prompt);
+        const response = result.response;
+        return response.text();
+    } catch (error) {
+        console.error('❌ Error al generar contenido con Gemini:', error);
         return null;
     }
 }
@@ -285,6 +295,8 @@ async function runContentCreator() {
         }
 
         console.log(`📦 Lote de ${eventsToProcess.length} eventos encontrado. Empezando procesamiento...`);
+        
+        let useGroq = true; // Para alternar entre Groq y Gemini
 
         for (const event of eventsToProcess) {
             await updateEventStatus(eventsCollection, event._id, 'processing');
@@ -316,7 +328,20 @@ async function runContentCreator() {
                 continue;
             }
 
-            const structuredPost = await generateStructuredPost(event, extractedContext);
+            let structuredPost;
+            let generator;
+
+            if (useGroq) {
+                console.log('🤖 Usando Groq para generar el post...');
+                structuredPost = await generateWithGroq(event, extractedContext);
+                generator = 'groq';
+            } else {
+                console.log('✨ Usando Gemini para generar el post...');
+                structuredPost = await generateWithGemini(event, extractedContext);
+                generator = 'gemini';
+            }
+            useGroq = !useGroq; // Alternar para el próximo evento
+
             if (!structuredPost) {
                 console.log('🔴 No se pudo generar contenido. Revertiendo para reintentar.');
                 await updateEventStatus(eventsCollection, event._id, 'pending');
@@ -325,17 +350,19 @@ async function runContentCreator() {
 
             let parsedPost;
             try {
-                parsedPost = JSON.parse(structuredPost);
+                // Limpiar el string por si la IA devuelve ```json ... ```
+                const cleanedPost = structuredPost.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+                parsedPost = JSON.parse(cleanedPost);
             } catch (jsonError) {
                 console.error('🔴 Error al parsear JSON. Marcando como fallido.', jsonError);
-                await updateEventStatus(eventsCollection, event._id, 'failed');
+                await updateEventStatus(eventsCollection, event._id, 'failed', { generatedWith: generator });
                 continue;
             }
 
             const { slug, meta_title, meta_desc, post_title, post_content } = parsedPost;
             if (!slug || !post_title || !post_content) {
                 console.log('🔴 JSON incompleto. Marcando como fallido.');
-                await updateEventStatus(eventsCollection, event._id, 'failed');
+                await updateEventStatus(eventsCollection, event._id, 'failed', { generatedWith: generator });
                 continue;
             }
 
@@ -363,7 +390,7 @@ async function runContentCreator() {
                 meta: { _aioseo_title: meta_title, _aioseo_description: meta_desc }
             }, aflandToken, featuredMediaId);
 
-            let finalFieldsToSet = {};
+            let finalFieldsToSet = { generatedWith: generator };
             if (publishResult && publishResult.finalImageUrl) {
                 finalFieldsToSet.headerImageUrl = publishResult.finalImageUrl;
                 finalFieldsToSet.imageUrl = publishResult.finalImageUrl;
