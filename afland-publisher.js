@@ -7,6 +7,31 @@ const FormData = require('form-data');
 
 const BOT_USER_AGENT = 'DuendeFinder-ContentBot/1.0'; // Definimos el User-Agent una vez
 
+async function downloadImage(url, filename) {
+    const generatedImagesDir = path.join(__dirname, 'generated_images');
+    if (!fs.existsSync(generatedImagesDir)) {
+        fs.mkdirSync(generatedImagesDir, { recursive: true });
+    }
+    const imagePath = path.join(generatedImagesDir, `${filename}.png`);
+    const writer = fs.createWriteStream(imagePath);
+
+    const response = await axios({
+        url,
+        method: 'GET',
+        responseType: 'stream',
+        headers: {
+            'User-Agent': BOT_USER_AGENT
+        }
+    });
+
+    response.data.pipe(writer);
+
+    return new Promise((resolve, reject) => {
+        writer.on('finish', () => resolve(imagePath));
+        writer.on('error', reject);
+    });
+}
+
 async function uploadImageToWordPress(imagePath, appPassword, altText, title) {
     if (!imagePath) return null;
 
@@ -93,4 +118,4 @@ async function publishToAflandBlog(postData, appPassword, mediaId) {
     }
 }
 
-module.exports = { publishToAflandBlog, uploadImageToWordPress };
+module.exports = { publishToAflandBlog, uploadImageToWordPress, downloadImage };

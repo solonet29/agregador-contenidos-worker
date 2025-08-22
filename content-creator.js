@@ -3,10 +3,14 @@ require('dotenv').config();
 const { MongoClient, ObjectId } = require('mongodb');
 const Groq = require('groq-sdk');
 const { createCanvas, loadImage, registerFont } = require('canvas');
-const { publishToAflandBlog, uploadImageToWordPress } = require('./afland-publisher');
+const { publishToAflandBlog, uploadImageToWordPress, downloadImage } = require('./afland-publisher');
 const { marked } = require('marked');
 const path = require('path');
 const fs = require('fs');
+const axios = require('axios');
+const cheerio = require('cheerio');
+
+
 // --- POOL DE ENLACES INTERNOS PARA SEO ---
 const INTERNAL_LINKS = [
     { url: 'https://afland.es/', anchor: 'nuestra página principal sobre flamenco' },
@@ -33,16 +37,71 @@ let tokensUsedToday = 0;
 
 // 3. Funciones de utilidad
 
-async function generateStructuredPost(event) {
+async function extractFromSourceURL(url) {
+    if (!url) {
+        return { imageUrl: null, context: null };
+    }
+    try {
+        const { data } = await axios.get(url, { timeout: 10000 });
+        const $ = cheerio.load(data);
+
+        // Prioridad 1: Open Graph Image
+        let imageUrl = $('meta[property="og:image"]').attr('content');
+
+        // Prioridad 2: La imagen más grande del cuerpo del post (si no hay og:image)
+        if (!imageUrl) {
+            let maxArea = 0;
+            $('body img').each((i, element) => {
+                const img = $(element);
+                // Intenta obtener dimensiones de atributos, ya que el renderizado no ocurre
+                const width = parseInt(img.attr('width')) || img.width() || 0;
+                const height = parseInt(img.attr('height')) || img.height() || 0;
+                const area = width * height;
+
+                if (area > maxArea) {
+                    maxArea = area;
+                    imageUrl = img.attr('src');
+                }
+            });
+        }
+        
+        // Asegurarse de que la URL de la imagen sea absoluta
+        if (imageUrl) {
+            try {
+                imageUrl = new URL(imageUrl, url).href;
+            } catch (e) {
+                console.warn(`URL de imagen inválida (${imageUrl}) encontrada en ${url}. Se descartará.`);
+                imageUrl = null;
+            }
+        }
+
+        // Extraer contexto de párrafos
+        let context = '';
+        $('p').each((i, element) => {
+            const paragraph = $(element).text().trim();
+            if (paragraph) {
+                context += paragraph + '\n\n';
+            }
+        });
+
+        return { imageUrl, context: context.trim() };
+    } catch (error) {
+        console.error(`❌ Error al extraer datos de la URL ${url}:`, error.message);
+        return { imageUrl: null, context: null };
+    }
+}
+
+
+async function generateStructuredPost(event, externalContext = '') {
     const eventDateFormatted = new Date(event.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    
     let extraContext = '';
     if (event.nightPlan && event.nightPlan.trim() !== '') {
-        extraContext = `# INFORMACIÓN ADICIONAL PARA ENRIQUECER EL POST\nUsa la siguiente guía local...\nContenido Adicional:\n${event.nightPlan}`;
+        extraContext += `\n\n# INFORMACIÓN ADICIONAL (PLAN NOCTURNO)\n${event.nightPlan}`;
     }
-
-    // Dentro de la función generateStructuredPost, reemplaza el prompt antiguo por este:
-
-    // En content-creator.js, dentro de generateStructuredPost
+    if (externalContext) {
+        extraContext += `\n\n# CONTEXTO EXTRAÍDO DE LA FUENTE ORIGINAL\n${externalContext}`;
+    }
 
     const prompt = `
 # CONTEXTO
@@ -59,9 +118,7 @@ Tu única salida debe ser un objeto JSON válido. No incluyas explicaciones ni e
 - Hora: ${event.time}
 - Lugar: ${event.venue}, ${event.city}
 - URL de la fuente/compra de entradas: ${event.affiliateLink || 'No disponible'}
-- Descripción del evento: ${event.description || 'No se proporcionó una descripción del evento.'}
-
-${extraContext}
+- Descripción del evento: ${event.description || 'No se proporcionó una descripción del evento.'}${extraContext}
 
 # REGLAS DE SEO
 A lo largo de todo el "post_content", integra de forma natural y variada algunas de las siguientes palabras clave:
@@ -117,6 +174,7 @@ A lo largo de todo el "post_content", integra de forma natural y variada algunas
         return null;
     }
 }
+
 
 async function updateEventStatus(collection, eventId, status, fieldsToSet = {}) {
     try {
@@ -197,7 +255,7 @@ async function createHeaderImage(eventData) {
 // 4. Función principal del script
 async function runContentCreator() {
     console.log('🚀 Iniciando creador de contenidos por lotes...');
-    const BATCH_SIZE = 3;
+    const BATCH_SIZE = 2;
     const client = new MongoClient(mongoUri);
 
     try {
@@ -212,8 +270,14 @@ async function runContentCreator() {
         const minDateString = twoDaysFromNow.toISOString().split('T')[0];
 
         const eventsToProcess = await eventsCollection.find({
-            contentStatus: 'pending', imageUrl: { $ne: null }, date: { $gte: minDateString }
+            contentStatus: 'pending',
+            $or: [
+                { imageUrl: { $ne: null, $ne: '' } },
+                { sourceURL: { $ne: null, $ne: '' } }
+            ],
+            date: { $gte: minDateString }
         }).sort({ verified: -1, date: 1 }).limit(BATCH_SIZE).toArray();
+
 
         if (eventsToProcess.length === 0) {
             console.log('✅ No hay eventos pendientes que cumplan los criterios en este lote.');
@@ -222,21 +286,37 @@ async function runContentCreator() {
 
         console.log(`📦 Lote de ${eventsToProcess.length} eventos encontrado. Empezando procesamiento...`);
 
-        // En content-creator.js, reemplaza el bucle 'for' completo
-
         for (const event of eventsToProcess) {
             await updateEventStatus(eventsCollection, event._id, 'processing');
             console.log(`
 ✨ Procesando evento con ID: ${event._id}`);
 
-            const headerImagePath = await createHeaderImage(event);
+            const { imageUrl: extractedImageUrl, context: extractedContext } = await extractFromSourceURL(event.sourceURL);
+
+            let headerImagePath = null;
+            if (extractedImageUrl) {
+                console.log(`🖼️ Imagen encontrada en la fuente: ${extractedImageUrl}`);
+                try {
+                    const downloadedImagePath = await downloadImage(extractedImageUrl, `downloaded-${event._id}`);
+                    headerImagePath = downloadedImagePath;
+                    console.log(`   -> ✅ Imagen descargada en: ${headerImagePath}`);
+                } catch (downloadError) {
+                    console.warn(`🔴 No se pudo descargar la imagen de ${extractedImageUrl}. Se generará una imagen de respaldo. Error: ${downloadError.message}`);
+                }
+            }
+
             if (!headerImagePath) {
-                console.log('🔴 No se pudo crear la imagen. Revertiendo para reintentar.');
+                console.log('🎨 No se encontró o no se pudo descargar la imagen. Creando una imagen de cabecera de respaldo...');
+                headerImagePath = await createHeaderImage(event);
+            }
+            
+            if (!headerImagePath) {
+                console.log('🔴 Fallo crítico: No se pudo obtener ni crear una imagen. Revertiendo para reintentar.');
                 await updateEventStatus(eventsCollection, event._id, 'pending');
                 continue;
             }
 
-            const structuredPost = await generateStructuredPost(event);
+            const structuredPost = await generateStructuredPost(event, extractedContext);
             if (!structuredPost) {
                 console.log('🔴 No se pudo generar contenido. Revertiendo para reintentar.');
                 await updateEventStatus(eventsCollection, event._id, 'pending');
@@ -261,7 +341,6 @@ async function runContentCreator() {
 
             const htmlContent = marked(post_content);
 
-            // --- LÓGICA CORREGIDA ---
             const eventDateForSeo = new Date(event.date).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
             const imageAltText = `Cartel del evento de ${event.artist.name} en ${event.venue}, ${event.city} el ${eventDateForSeo}`;
             const imageTitle = `${event.artist.name} en ${event.city} - ${event.name}`;
@@ -269,7 +348,7 @@ async function runContentCreator() {
             const featuredMediaId = await uploadImageToWordPress(headerImagePath, aflandToken, imageAltText, imageTitle);
 
             if (!featuredMediaId) {
-                console.log('🔴 No se pudo subir la imagen. Revertiendo para reintentar.');
+                console.log('🔴 No se pudo subir la imagen a WordPress. Revertiendo para reintentar.');
                 await updateEventStatus(eventsCollection, event._id, 'pending');
                 continue;
             }
@@ -286,8 +365,8 @@ async function runContentCreator() {
 
             let finalFieldsToSet = {};
             if (publishResult && publishResult.finalImageUrl) {
-                finalFieldsToSet.headerImageUrl = publishResult.finalImageUrl; // Se mantiene el campo original
-                finalFieldsToSet.imageUrl = publishResult.finalImageUrl;      // Se añade el campo para el frontend
+                finalFieldsToSet.headerImageUrl = publishResult.finalImageUrl;
+                finalFieldsToSet.imageUrl = publishResult.finalImageUrl;
                 console.log(`   -> ✅ URL de la imagen guardada en MongoDB.`);
             }
 
