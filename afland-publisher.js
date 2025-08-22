@@ -100,18 +100,19 @@ async function publishToAflandBlog(postData, appPassword, mediaId) {
         });
 
         if (response.status === 201) {
-            console.log('✅ Publicación enviada al blog con éxito.');
-            console.log(`   -> URL del Post: ${response.data.link}`);
+            const postUrl = response.data.link;
+            console.log(`✅ Publicación enviada al blog con éxito. URL: ${postUrl}`);
+            
+            let imageUrl = null;
             try {
-                const imageUrl = response.data._embedded['wp:featuredmedia'][0].source_url;
+                imageUrl = response.data._embedded['wp:featuredmedia'][0].source_url;
                 console.log(`   -> URL de Imagen Destacada: ${imageUrl}`);
-                return { postResponse: response.data, finalImageUrl: imageUrl };
             } catch (e) {
                 console.warn('   -> ⚠️ No se pudo extraer la URL de la imagen destacada.');
-                return { postResponse: response.data, finalImageUrl: null };
             }
+            return { postResponse: response.data, finalImageUrl: imageUrl, postUrl: postUrl };
         }
-        return { postResponse: response.data, finalImageUrl: null };
+        return { postResponse: response.data, finalImageUrl: null, postUrl: null };
     } catch (error) {
         console.error('❌ Error al publicar en WordPress:', error.response ? error.response.data : error.message);
         throw error;
