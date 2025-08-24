@@ -5,7 +5,7 @@ const { connectToDatabase } = require('./database.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // --- Configuración ---
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 2;
 
 // Lógica de Gemini
 if (!process.env.GEMINI_API_KEY) {
@@ -53,9 +53,9 @@ async function generateMissingPlans() {
             nightPlan: { $exists: false },
             date: { $gt: threeDaysFromNow }
         })
-        .sort({ date: 1 })
-        .limit(BATCH_SIZE)
-        .toArray();
+            .sort({ date: 1 })
+            .limit(BATCH_SIZE)
+            .toArray();
 
         if (eventsToProcess.length === 0) {
             console.log("No se encontraron eventos que necesiten un plan de noche. Finalizando.");
