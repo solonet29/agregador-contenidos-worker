@@ -1,7 +1,7 @@
 
 require('dotenv').config();
 const { ObjectId } = require('mongodb');
-const { connectToDatabase } = require('./database.js');
+const { connectToDatabase } = require('./lib/database.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // --- Configuración ---
