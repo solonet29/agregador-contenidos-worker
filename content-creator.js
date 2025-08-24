@@ -1,115 +1,107 @@
-// 1. Módulos y dependencias
+
+const mongoose = require('mongoose');
+const Event = require('./models/Event'); // Asegúrate de que la ruta al modelo Event sea correcta
+const { publishToWordPress } = require('./wordpressClient'); // Cliente de WordPress
 require('dotenv').config();
-const { MongoClient, ObjectId } = require('mongodb');
-const Groq = require('groq-sdk');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { createCanvas, loadImage, registerFont } = require('canvas');
-const { publishToAflandBlog, uploadImageToWordPress, downloadImage } = require('./afland-publisher');
-const { marked } = require('marked');
-const path = require('path');
-const fs = require('fs');
-const axios = require('axios');
-const cheerio = require('cheerio');
 
+// --- CONFIGURACIÓN ---
+const BATCH_SIZE = 5;
+const MONGODB_URI = process.env.MONGODB_URI;
 
-// --- POOL DE ENLACES INTERNOS PARA SEO ---
-const INTERNAL_LINKS = [
-    { url: 'https://afland.es/', anchor: 'nuestra página principal sobre flamenco' },
-    { url: 'https://afland.es/noticias/', anchor: 'noticias de flamenco' },
-    { url: 'https://afland.es/viajes-y-rutas/', anchor: 'viajes flamencos' },
-];
-// --- FIN DEL POOL ---
-// 2. Configuración desde variables de entorno
-const mongoUri = process.env.MONGO_URI;
-const groqApiKey = process.env.GROQ_API_KEY;
-const geminiApiKey = process.env.GEMINI_API_KEY;
-const aflandToken = process.env.AFLAND_API_KEY;
-const dbName = 'DuendeDB';
-const eventsCollectionName = 'events';
-
-const groqModel = process.env.GROQ_MODEL || 'llama3-8b-8192';
-
-if (!mongoUri || !groqApiKey || !aflandToken || !geminiApiKey) {
-    throw new Error('Faltan variables de entorno críticas. Revisa tus secretos de GitHub Actions (MONGO_URI, GROQ_API_KEY, GEMINI_API_KEY, AFLAND_API_KEY).');
+/**
+ * Conecta a la base de datos MongoDB.
+ */
+async function connectDB() {
+  if (mongoose.connection.readyState >= 1) {
+    return;
+  }
+  await mongoose.connect(MONGODB_URI);
+  console.log('Conectado a MongoDB.');
 }
 
-// Inicialización de clientes de IA
-const groq = new Groq({ apiKey: groqApiKey });
-const genAI = new GoogleGenerativeAI(geminiApiKey);
-const geminiModel = genAI.getGenerativeModel({
-    model: "gemini-1.5-flash",
-    generationConfig: { responseMimeType: "application/json" }
-});
+/**
+ * Procesa los eventos con contenido pendiente y los programa en WordPress.
+ * Funciona en lotes para ser compatible con entornos serverless.
+ */
+async function processPendingContent() {
+  console.log('Iniciando el proceso de creación de contenido...');
 
+  try {
+    await connectDB();
 
-// 3. Funciones de utilidad
+    // 1. Buscar eventos pendientes en la base de datos
+    const eventsToProcess = await Event.find({
+      contentStatus: 'pending',
+      contentForPost: { $exists: true, $ne: null }
+    }).limit(BATCH_SIZE);
 
-async function extractFromSourceURL(url) {
-    if (!url) {
-        return { imageUrl: null, context: null };
+    if (eventsToProcess.length === 0) {
+      console.log('No hay eventos pendientes para procesar. Finalizando.');
+      return;
     }
-    try {
-        const { data } = await axios.get(url, { timeout: 10000 });
-        const $ = cheerio.load(data);
 
-        let imageUrl = $('meta[property="og:image"]').attr('content');
-        if (!imageUrl) {
-            let maxArea = 0;
-            $('body img').each((i, element) => {
-                const img = $(element);
-                const width = parseInt(img.attr('width')) || img.width() || 0;
-                const height = parseInt(img.attr('height')) || img.height() || 0;
-                const area = width * height;
-                if (area > maxArea) {
-                    maxArea = area;
-                    imageUrl = img.attr('src');
-                }
-            });
+    console.log(`Se encontraron ${eventsToProcess.length} eventos para procesar en este lote.`);
+
+    // 2. Procesar cada evento del lote
+    for (const [index, event] of eventsToProcess.entries()) {
+      try {
+        // 3. Calcular la fecha de publicación futura incremental
+        const publicationDate = new Date();
+        publicationDate.setHours(publicationDate.getHours() + index + 1);
+
+        // 4. Crear el contenido final con el footer
+        const footer = `
+---
+Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encontrar moda y accesorios únicos.
+[Ver todos los detalles de este evento en Duende Finder](https://buscador.afland.es/?event_id=${event._id})
+        `;
+        const finalContent = `${event.contentForPost}
+
+${footer}`;
+
+        // 5. Preparar los datos para la API de WordPress
+        const postData = {
+          title: `Plan de Noche: Disfruta de ${event.title}`,
+          content: finalContent,
+          status: 'future',
+          date: publicationDate.toISOString(),
+          // Aquí podrías añadir categorías, etiquetas, etc. si fuera necesario
+          // categories: [1, 2],
+          // tags: 'flamenco, evento, Madrid'
+        };
+
+        // 6. Publicar en WordPress
+        const wordpressResponse = await publishToWordPress(postData);
+
+        if (!wordpressResponse || !wordpressResponse.id) {
+            throw new Error('La respuesta de la API de WordPress no contiene un ID de post.');
         }
-        
-        if (imageUrl) {
-            try {
-                imageUrl = new URL(imageUrl, url).href;
-            } catch (e) {
-                console.warn(`URL de imagen inválida (${imageUrl}) encontrada en ${url}. Se descartará.`);
-                imageUrl = null;
-            }
-        }
 
-        let context = '';
-        $('p').each((i, element) => {
-            const paragraph = $(element).text().trim();
-            if (paragraph) {
-                context += paragraph + '\n\n';
-            }
-        });
+        // 7. Actualizar el estado del evento en MongoDB
+        event.contentStatus = 'published';
+        event.wordpressPostId = wordpressResponse.id;
+        event.publicationDate = publicationDate;
+        await event.save();
 
-        return { imageUrl, context: context.trim() };
-    } catch (error) {
-        console.error(`❌ Error al extraer datos de la URL ${url}:`, error.message);
-        return { imageUrl: null, context: null };
+        console.log(`✅ Post para "${event.title}" programado con éxito para: ${publicationDate.toLocaleString('es-ES')}`);
+
+      } catch (error) {
+        console.error(`❌ Error procesando el evento "${event.title}" (ID: ${event._id}):`, error.message);
+        // Opcional: Marcar el evento como fallido para no reintentarlo indefinidamente
+        // event.contentStatus = 'failed';
+        // await event.save();
+      }
     }
+
+  } catch (error) {
+    console.error('Ha ocurrido un error fatal durante el proceso:', error);
+  } finally {
+    // 8. Cerrar la conexión a la base de datos
+    await mongoose.disconnect();
+    console.log('Desconectado de MongoDB. Proceso finalizado.');
+  }
 }
 
-function getPrompt(event, externalContext = '') {
-    const eventDateFormatted = new Date(event.date).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    const eventUrl = `https://buscador.afland.es/?eventId=${event._id}`;
-
-    let extraContext = '';
-    if (event.nightPlan && event.nightPlan.trim() !== '') {
-        extraContext += `
-
-# INFORMACIÓN ADICIONAL (PLAN NOCTURNO)
-${event.nightPlan}`;
-    }
-    if (externalContext) {
-        extraContext += `
-
-# CONTEXTO EXTRAÍDO DE LA FUENTE ORIGINAL
-${externalContext}`;
-    }
-
-    return `
-# CONTEXTO
-Eres 
-```
+// --- EJECUCIÓN ---
+// Esta parte se puede llamar desde un endpoint de Vercel, un cron job, o directamente.
+processPendingContent();
