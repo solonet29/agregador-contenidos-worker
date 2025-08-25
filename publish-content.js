@@ -1,4 +1,4 @@
-// publish-content.js (VERSIÓN FINAL CORREGIDA)
+// publish-content.js (VERSIÓN FINAL CON LA CORRECCIÓN DE CATEGORÍA)
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
 const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
@@ -34,7 +34,7 @@ async function main() {
         const imagePath = await createSocialImage(event);
 
         // --- PASO 2: SUBIR IMAGEN A WORDPRESS ---
-        const imageId = await uploadImage(imagePath, event.name); // Pasamos el nombre del evento como título de la imagen
+        const imageId = await uploadImage(imagePath, event.name);
         if (!imageId) {
           throw new Error('La subida de la imagen falló, no se puede continuar con el post.');
         }
