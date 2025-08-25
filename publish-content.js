@@ -73,6 +73,11 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
           categories: [categoryIdAsNumber],
           featured_media: imageId,
         };
+        // --- INICIO DE LA PRUEBA DE DEPURACIÓN ---
+        console.log("--- HTML que se está enviando a WordPress ---");
+        console.log(postData.content);
+        console.log("------------------------------------------");
+        // --- FIN DE LA PRUEBA DE DEPURACIÓN ---
 
         const wordpressResponse = await publishToWordPress(postData);
 
