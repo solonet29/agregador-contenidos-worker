@@ -5,7 +5,7 @@ const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
 const showdown = require('showdown');
 const { createSocialImage } = require('./lib/imageGenerator.js');
 
-const BATCH_SIZE = 4;
+const BATCH_SIZE = 12;
 
 async function main() {
   console.log('Iniciando el publicador de contenidos...');
@@ -96,4 +96,5 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
   }
 }
 
-main();
+// Añade esta línea al final
+module.exports = { runPublishingBatch: main }; // Exportamos la función 'main' con un nombre más claro
