@@ -1,4 +1,4 @@
-// publish-content.js (VERSIÓN FINAL CON LA CORRECCIÓN DE CATEGORÍA)
+// publish-content.js (VERSIÓN DE DEPURACIÓN)
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
 const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
@@ -29,17 +29,13 @@ async function main() {
 
     for (const [index, event] of eventsToPublish.entries()) {
       try {
-        // --- PASO 1: CREAR IMAGEN ---
-        console.log(`🎨 Creando imagen para "${event.name}"...`);
+        console.log(`--- Procesando evento: "${event.name}" ---`);
         const imagePath = await createSocialImage(event);
-
-        // --- PASO 2: SUBIR IMAGEN A WORDPRESS ---
         const imageId = await uploadImage(imagePath, event.name);
         if (!imageId) {
           throw new Error('La subida de la imagen falló, no se puede continuar con el post.');
         }
 
-        // --- PASO 3: PREPARAR CONTENIDO HTML ---
         const footer = `
 ---
 ### ¿Buscas el atuendo perfecto?
@@ -49,17 +45,20 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
         const markdownContent = `${event.nightPlan}\n\n${footer}`;
         const htmlContent = converter.makeHtml(markdownContent);
 
-        // --- PASO 4: PUBLICAR EL POST EN WORDPRESS ---
         const publicationDate = new Date();
         publicationDate.setHours(publicationDate.getHours() + index + 1);
 
         // ==========================================================
-        // --- INICIO DE LA CORRECCIÓN ---
-        // 1. Leemos el ID de la categoría (que es un TEXTO) desde el .env
+        // --- INICIO DE LA DEPURACIÓN ---
+        console.log("--- DEPURANDO LA CATEGORÍA ---");
         const categoryIdAsString = process.env.WORDPRESS_EVENTS_CATEGORY_ID;
-        // 2. Lo convertimos a NÚMERO, que es lo que WordPress necesita
+        console.log(`1. Valor leído de .env (debería ser "96"): -> ${categoryIdAsString}`);
+        console.log(`2. Tipo de dato leído de .env (debería ser "string"): -> ${typeof categoryIdAsString}`);
+
         const categoryIdAsNumber = parseInt(categoryIdAsString, 10);
-        // --- FIN DE LA CORRECCIÓN ---
+        console.log(`3. Valor después de parseInt (debería ser 96): -> ${categoryIdAsNumber}`);
+        console.log(`4. Tipo de dato después de parseInt (debería ser "number"): -> ${typeof categoryIdAsNumber}`);
+        // --- FIN DE LA DEPURACIÓN ---
         // ==========================================================
 
         const postData = {
@@ -67,14 +66,17 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
           content: htmlContent,
           status: 'future',
           date: publicationDate.toISOString(),
-          // 3. Usamos la variable ya convertida a número
           categories: [categoryIdAsNumber],
           featured_media: imageId,
         };
 
+        console.log('5. Objeto final que se envía a WordPress:');
+        console.log(JSON.stringify(postData, null, 2));
+        console.log("---------------------------------");
+
+
         const wordpressResponse = await publishToWordPress(postData);
 
-        // --- PASO 5: ACTUALIZAR NUESTRA BASE DE DATOS ---
         await eventsCollection.updateOne(
           { _id: event._id },
           { $set: { contentStatus: 'published', wordpressPostId: wordpressResponse.id, publicationDate: publicationDate, blogPostUrl: wordpressResponse.link } }
