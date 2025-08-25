@@ -9,11 +9,6 @@ const path = require('path');
 
 const BATCH_SIZE = 4;
 
-/**
- * Genera una imagen para el evento usando un fondo y una fuente personalizados.
- * @param {object} event - El objeto del evento.
- * @returns {Promise<string|null>} - La ruta a la imagen generada o null si hay un error.
- */
 async function createEventImage(event) {
     try {
         console.log(`🎨 Creando imagen para el evento: ${event.name}`);
@@ -68,24 +63,14 @@ async function createEventImage(event) {
     }
 }
 
-/**
- * Corrige el formato de los enlaces de Google Maps en el texto generado.
- * @param {string} text - El contenido del nightPlan.
- * @returns {string} - El texto con los enlaces formateados.
- */
 function formatExistingLinks(text) {
     if (!text) {
         return text;
     }
-    const regex = /\* \*\*([^\*]+)\*\*:(.*?\[\1\]\([^)]+\))/g;
+    const regex = /\* \*([^\*]+)\*:(.*?[\[]\1[\]]\([^)]+\))/g;
     return text.replace(regex, '* **[$1]($3):**$2');
 }
 
-
-/**
- * Procesa eventos que tienen un 'nightPlan' generado pero aún no han sido
- * publicados en WordPress.
- */
 async function processPendingContent() {
   console.log('Iniciando el proceso de creación de contenido...');
 
@@ -132,20 +117,18 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
 ➡️ **[Ver todos los detalles de este evento en Duende Finder](https://buscador.afland.es/?event_id=${event._id})
         `;
         
-        // Formatear enlaces en el contenido existente
         const formattedNightPlan = formatExistingLinks(event.nightPlan);
         const finalContent = `${formattedNightPlan}\n\n${footer}`;
-
-        const eventosCategoryId = process.env.WORDPRESS_EVENTS_CATEGORY_ID;
 
         const postData = {
           title: `Plan de Noche: Disfruta de ${event.name}`,
           content: finalContent,
           status: 'future',
           date: publicationDate.toISOString(),
-          categories: [eventosCategoryId],
           featured_media: mediaId
         };
+
+        postData.categories = [96];
 
         const wordpressResponse = await publishToWordPress(postData);
 
