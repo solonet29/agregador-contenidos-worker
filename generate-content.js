@@ -1,4 +1,4 @@
-// generate-content.js
+console.log("--- Ejecutando generate-content.js v2 (con logger) ---");
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');

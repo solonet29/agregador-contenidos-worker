@@ -1,4 +1,4 @@
-// publish-content.js (VERSIÓN DE DEPURACIÓN)
+console.log("--- Ejecutando publish-content.js v2 (con logger) ---");
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
 const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
