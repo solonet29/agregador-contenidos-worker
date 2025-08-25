@@ -1,8 +1,8 @@
+require('dotenv').config();
 // CAMBIO: Se elimina mongoose y se importa el helper y ObjectId
 const { connectToDatabase } = require('./lib/database');
 const { ObjectId } = require('mongodb');
 const { publishToWordPress } = require('./lib/wordpressClient'); // Asumimos que está en /lib
-require('dotenv').config();
 
 // --- CONFIGURACIÓN ---
 const BATCH_SIZE = 5;
