@@ -30,19 +30,26 @@ async function createEventImage(event) {
 
         ctx.drawImage(background, 0, 0, background.width, background.height);
 
+        // Estilos de texto con contorno para legibilidad
         ctx.fillStyle = 'white';
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 4;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const x = canvas.width / 2;
 
+        // Dibujar nombre del evento
         ctx.font = '72px Cinzel';
         const eventName = event.name;
+        ctx.strokeText(eventName, x, canvas.height / 2 - 30);
         ctx.fillText(eventName, x, canvas.height / 2 - 30);
 
+        // Dibujar fecha del evento
         ctx.font = '48px Cinzel';
         const eventDate = new Date(event.date).toLocaleDateString('es-ES', {
             year: 'numeric', month: 'long', day: 'numeric'
         });
+        ctx.strokeText(eventDate, x, canvas.height / 2 + 40);
         ctx.fillText(eventDate, x, canvas.height / 2 + 40);
 
         const outputPath = path.join(generatedDir, `${event._id}.png`);
@@ -67,7 +74,7 @@ function formatExistingLinks(text) {
     if (!text) {
         return text;
     }
-    const regex = /\* \*([^\*]+)\*:(.*?[\[]\1[\]]\([^)]+\))/g;
+    const regex = /\* \*([^\*]+)\*:(.*?[[\1]]\([^)]+\))/g;
     return text.replace(regex, '* **[$1]($3):**$2');
 }
 
@@ -128,7 +135,14 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
           featured_media: mediaId
         };
 
-        postData.categories = [96];
+        // Asignar categoría de WordPress de forma segura
+        const categoryId = process.env.WORDPRESS_EVENTS_CATEGORY_ID || 96;
+        const categoryIdInt = parseInt(categoryId, 10);
+        if (!isNaN(categoryIdInt)) {
+            postData.categories = [categoryIdInt];
+        } else {
+            console.warn(`⚠️ El ID de categoría ("${categoryId}") no es un número válido. No se asignará la categoría.`);
+        }
 
         const wordpressResponse = await publishToWordPress(postData);
 
