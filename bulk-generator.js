@@ -34,6 +34,7 @@ async function bulkGeneratePlans() {
         const eventsToProcess = await eventsCollection.find({
             nightPlan: { $exists: false },
             date: { $gte: today.toISOString().split('T')[0] }
+            name: { $exists: true, $ne: "" }
         }).limit(BATCH_SIZE).toArray();
 
         if (eventsToProcess.length === 0) {

@@ -52,6 +52,7 @@ async function generateMissingPlans() {
         const eventsToProcess = await eventsCollection.find({
             nightPlan: { $exists: false },
             date: { $gt: threeDaysFromNow }
+            name: { $exists: true, $ne: "" }
         })
             .sort({ date: 1 })
             .limit(BATCH_SIZE)
