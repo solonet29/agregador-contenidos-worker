@@ -30,7 +30,6 @@ async function createEventImage(event) {
 
         ctx.drawImage(background, 0, 0, background.width, background.height);
 
-        // Estilos de texto con contorno para legibilidad
         ctx.fillStyle = 'white';
         ctx.strokeStyle = 'black';
         ctx.lineWidth = 4;
@@ -38,13 +37,11 @@ async function createEventImage(event) {
         ctx.textBaseline = 'middle';
         const x = canvas.width / 2;
 
-        // Dibujar nombre del evento
         ctx.font = '72px Cinzel';
         const eventName = event.name;
         ctx.strokeText(eventName, x, canvas.height / 2 - 30);
         ctx.fillText(eventName, x, canvas.height / 2 - 30);
 
-        // Dibujar fecha del evento
         ctx.font = '48px Cinzel';
         const eventDate = new Date(event.date).toLocaleDateString('es-ES', {
             year: 'numeric', month: 'long', day: 'numeric'
@@ -74,7 +71,7 @@ function formatExistingLinks(text) {
     if (!text) {
         return text;
     }
-    const regex = /\* \*([^\*]+)\*:(.*?[[\1]]\([^)]+\))/g;
+    const regex = /\* \*([^\*]+)\*:(.*?[[\]\1\]\([^)]+\))/g;
     return text.replace(regex, '* **[$1]($3):**$2');
 }
 
@@ -101,6 +98,13 @@ async function processPendingContent() {
 
     for (const [index, event] of eventsToProcess.entries()) {
       try {
+        const nightPlan = event.nightPlan;
+
+        if (nightPlan.includes('Eres "Duende"')) {
+            console.error(`❌ ERROR: El nightPlan para "${event.name}" parece ser la plantilla. Saltando evento.`);
+            continue; 
+        }
+
         const imagePath = await createEventImage(event);
         let mediaId = null;
         if (imagePath) {
@@ -116,16 +120,16 @@ async function processPendingContent() {
         const publicationDate = new Date();
         publicationDate.setHours(publicationDate.getHours() + index + 1);
 
-        const footer = `
+        const footerTienda = `
 ---
 ### ¿Buscas el atuendo perfecto?
-Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encontrar moda y accesorios únicos.
+Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encontrar moda y accesorios únicos.`;
+        const footerEnlace = `
 
-➡️ **[Ver todos los detalles de este evento en Duende Finder](https://buscador.afland.es/?event_id=${event._id})
-        `;
+➡️ **[Ver todos los detalles de este evento en Duende Finder](https://buscador.afland.es/?event_id=${event._id})**`;
         
-        const formattedNightPlan = formatExistingLinks(event.nightPlan);
-        const finalContent = `${formattedNightPlan}\n\n${footer}`;
+        const formattedNightPlan = formatExistingLinks(nightPlan);
+        const finalContent = `${formattedNightPlan}${footerTienda}${footerEnlace}`;
 
         const postData = {
           title: `Plan de Noche: Disfruta de ${event.name}`,
@@ -135,7 +139,6 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
           featured_media: mediaId
         };
 
-        // Asignar categoría de WordPress de forma segura
         const categoryId = process.env.WORDPRESS_EVENTS_CATEGORY_ID || 96;
         const categoryIdInt = parseInt(categoryId, 10);
         if (!isNaN(categoryIdInt)) {
