@@ -3,6 +3,10 @@
         {
             "path": "/api/cron/run-proactive-generator",
             "schedule": "0 3 * * *"
+        },
+        {
+            "path": "/api/cron/run-content-creator",
+            "schedule": "0 9,13,19 * * *"
         }
     ]
 }

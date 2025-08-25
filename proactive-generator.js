@@ -5,7 +5,7 @@ const { connectToDatabase } = require('./lib/database.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // --- Configuración ---
-const BATCH_SIZE = 2;
+const BATCH_SIZE = 50;
 
 // Lógica de Gemini
 if (!process.env.GEMINI_API_KEY) {

@@ -5,7 +5,7 @@ const { ObjectId } = require('mongodb');
 const { publishToWordPress } = require('./lib/wordpressClient'); // Asumimos que está en /lib
 
 // --- CONFIGURACIÓN ---
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 4;
 
 /**
  * Procesa eventos que tienen un 'nightPlan' generado pero aún no han sido
