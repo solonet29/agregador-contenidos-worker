@@ -1,0 +1,8 @@
+{
+    "crons": [
+        {
+            "path": "/api/cron/run-proactive-generator",
+            "schedule": "0 3 * * *"
+        }
+    ]
+}

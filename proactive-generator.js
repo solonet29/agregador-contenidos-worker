@@ -101,4 +101,5 @@ async function generateMissingPlans() {
 }
 
 // Ejecutar la función principal
-generateMissingPlans();
+// Añade esta línea al final
+module.exports = { generateMissingPlans };
