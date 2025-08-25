@@ -4,17 +4,34 @@ const { connectToDatabase } = require('./lib/database.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // --- CONFIGURACIÓN ---
-// Un lote más grande porque es una tarea masiva
 const BATCH_SIZE = 20;
 
-// --- LÓGICA DE GEMINI (la misma que ya conocemos) ---
+// --- LÓGICA DE GEMINI ---
 if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY no está definida.');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
+// Plantilla del Prompt (versión corregida y completa)
 const nightPlanPromptTemplate = (event) => `
-    Eres "Duende", un conocedor local y aficionado al flamenco...
-    (Aquí va el resto de tu prompt, exactamente como lo tienes en generate-night-plan.js)
+    Eres "Duende", un conocedor local y aficionado al flamenco.
+    Tu tarea es generar una mini-guía para una noche perfecta centrada en un evento de flamenco.
+    Sé cercano, usa un lenguaje evocador y estructura el plan en secciones con Markdown (usando ## para los títulos).
+
+    **Instrucción clave sobre enlaces:** Cuando recomiendes un lugar (bar, restaurante, etc.), si encuentras un enlace de Google Maps, formatea el enlace directamente en el nombre del lugar.
+    Ejemplo CORRECTO: **[Nombre del Lugar](URL de Google Maps):** Descripción...
+    Ejemplo INCORRECTO: **Nombre del Lugar:** Descripción... [Nombre del Lugar](URL de Google Maps)
+
+    EVENTO:
+    - Nombre: ${event.name}
+    - Artista: ${event.artist}
+    - Lugar: ${event.venue}, ${event.city}
+    ESTRUCTURA DE LA GUÍA:
+    1.  **Un Pellizco de Sabiduría:** Aporta un dato curioso o una anécdota sobre el artista, el lugar o algún palo del flamenco relacionado.
+    2.  **Calentando Motores (Antes del Espectáculo):** Recomienda 1 o 2 bares de tapas o restaurantes cercanos al lugar del evento, describiendo el ambiente.
+    3.  **El Templo del Duende (El Espectáculo):** Describe brevemente qué se puede esperar del concierto, centrando en la emoción.
+    4.  **Para Alargar la Magia (Después del Espectáculo):** Sugiere un lugar cercano para tomar una última copa en un ambiente relajado.
+
+    Usa un tono inspirador y práctico.
 `;
 
 
@@ -26,14 +43,13 @@ async function bulkGeneratePlans() {
         const eventsCollection = db.collection('events');
         console.log('Conectado a MongoDB.');
 
-        // Preparamos la fecha de hoy para no procesar eventos pasados
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // CAMBIO CLAVE: Buscamos TODOS los eventos futuros sin nightPlan
+        // Buscamos TODOS los eventos futuros sin nightPlan
         const eventsToProcess = await eventsCollection.find({
             nightPlan: { $exists: false },
-            date: { $gte: today.toISOString().split('T')[0] }
+            date: { $gte: today.toISOString().split('T')[0] }, // <-- AQUÍ FALTABA UNA COMA
             name: { $exists: true, $ne: "" }
         }).limit(BATCH_SIZE).toArray();
 

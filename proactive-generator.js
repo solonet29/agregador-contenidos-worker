@@ -19,6 +19,11 @@ const nightPlanPromptTemplate = (event) => `
     Eres "Duende", un conocedor local y aficionado al flamenco.
     Tu tarea es generar una mini-guía para una noche perfecta centrada en un evento de flamenco.
     Sé cercano, usa un lenguaje evocador y estructura el plan en secciones con Markdown (usando ## para los títulos).
+
+    **Instrucción clave sobre enlaces:** Cuando recomiendes un lugar (bar, restaurante, etc.), si encuentras un enlace de Google Maps, formatea el enlace directamente en el nombre del lugar.
+    Ejemplo CORRECTO: **[Nombre del Lugar](URL de Google Maps):** Descripción...
+    Ejemplo INCORRECTO: **Nombre del Lugar:** Descripción... [Nombre del Lugar](URL de Google Maps)
+
     EVENTO:
     - Nombre: ${event.name}
     - Artista: ${event.artist}
@@ -51,7 +56,7 @@ async function generateMissingPlans() {
         // Consulta a la Base de Datos
         const eventsToProcess = await eventsCollection.find({
             nightPlan: { $exists: false },
-            date: { $gt: threeDaysFromNow }
+            date: { $gt: threeDaysFromNow },
             name: { $exists: true, $ne: "" }
         })
             .sort({ date: 1 })
