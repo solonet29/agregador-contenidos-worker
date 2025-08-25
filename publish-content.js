@@ -1,9 +1,9 @@
-// publish-content.js
+// publish-content.js (VERSIÓN FINAL CORREGIDA)
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
 const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
 const showdown = require('showdown');
-const { createSocialImage } = require('./lib/imageGenerator.js'); // Importamos el generador de imágenes
+const { createSocialImage } = require('./lib/imageGenerator.js');
 
 const BATCH_SIZE = 4;
 
@@ -13,7 +13,6 @@ async function main() {
     const db = await connectToDatabase();
     const eventsCollection = db.collection('events');
 
-    // Busca eventos con plan generado que aún no han sido publicados
     const eventsToPublish = await eventsCollection.find({
       nightPlan: { $exists: true, $ne: null },
       wordpressPostId: { $exists: false },
@@ -32,10 +31,10 @@ async function main() {
       try {
         // --- PASO 1: CREAR IMAGEN ---
         console.log(`🎨 Creando imagen para "${event.name}"...`);
-        const imagePath = await createSocialImage(event); // Esta función debe devolver la ruta al archivo .png
+        const imagePath = await createSocialImage(event);
 
         // --- PASO 2: SUBIR IMAGEN A WORDPRESS ---
-        const imageId = await uploadImage(imagePath);
+        const imageId = await uploadImage(imagePath, event.name); // Pasamos el nombre del evento como título de la imagen
         if (!imageId) {
           throw new Error('La subida de la imagen falló, no se puede continuar con el post.');
         }
@@ -54,12 +53,22 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
         const publicationDate = new Date();
         publicationDate.setHours(publicationDate.getHours() + index + 1);
 
+        // ==========================================================
+        // --- INICIO DE LA CORRECCIÓN ---
+        // 1. Leemos el ID de la categoría (que es un TEXTO) desde el .env
+        const categoryIdAsString = process.env.WORDPRESS_EVENTS_CATEGORY_ID;
+        // 2. Lo convertimos a NÚMERO, que es lo que WordPress necesita
+        const categoryIdAsNumber = parseInt(categoryIdAsString, 10);
+        // --- FIN DE LA CORRECCIÓN ---
+        // ==========================================================
+
         const postData = {
           title: `Plan de Noche: Disfruta de ${event.name}`,
           content: htmlContent,
           status: 'future',
           date: publicationDate.toISOString(),
-          categories: [process.env.WORDPRESS_EVENTS_CATEGORY_ID],
+          // 3. Usamos la variable ya convertida a número
+          categories: [categoryIdAsNumber],
           featured_media: imageId,
         };
 
