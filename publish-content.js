@@ -1,11 +1,25 @@
-console.log("--- Ejecutando publish-content.js v2 (con logger) ---");
-require('dotenv').config();
-const { connectToDatabase } = require('./lib/database.js');
-const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
-const showdown = require('showdown');
-const { createSocialImage } = require('./lib/imageGenerator.js');
+// publish-content.js (VERSIÓN DE DEPURACIÓN DE MÓDULOS)
 
-const BATCH_SIZE = 12;
+console.log("--- Ejecutando publish-content.js v3 (Depurando Módulos) ---");
+
+require('dotenv').config();
+console.log("✅ 1/5: Módulo 'dotenv' cargado.");
+
+const { connectToDatabase } = require('./lib/database.js');
+console.log("✅ 2/5: Módulo 'database.js' cargado.");
+
+const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
+console.log("✅ 3/5: Módulo 'wordpressClient.js' cargado.");
+
+const showdown = require('showdown');
+console.log("✅ 4/5: Módulo 'showdown' cargado.");
+
+const { createSocialImage } = require('./lib/imageGenerator.js');
+console.log("✅ 5/5: Módulo 'imageGenerator.js' cargado.");
+
+console.log("--- Todos los módulos cargados. Iniciando función main() ---");
+
+const BATCH_SIZE = 4;
 
 async function main() {
   console.log('Iniciando el publicador de contenidos...');
@@ -29,8 +43,9 @@ async function main() {
 
     for (const [index, event] of eventsToPublish.entries()) {
       try {
-        console.log(`--- Procesando evento: "${event.name}" ---`);
+        console.log(`Creando imagen para "${event.name}"...`);
         const imagePath = await createSocialImage(event);
+
         const imageId = await uploadImage(imagePath, event.name);
         if (!imageId) {
           throw new Error('La subida de la imagen falló, no se puede continuar con el post.');
@@ -48,18 +63,7 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
         const publicationDate = new Date();
         publicationDate.setHours(publicationDate.getHours() + index + 1);
 
-        // ==========================================================
-        // --- INICIO DE LA DEPURACIÓN ---
-        console.log("--- DEPURANDO LA CATEGORÍA ---");
-        const categoryIdAsString = process.env.WORDPRESS_EVENTS_CATEGORY_ID;
-        console.log(`1. Valor leído de .env (debería ser "96"): -> ${categoryIdAsString}`);
-        console.log(`2. Tipo de dato leído de .env (debería ser "string"): -> ${typeof categoryIdAsString}`);
-
-        const categoryIdAsNumber = parseInt(categoryIdAsString, 10);
-        console.log(`3. Valor después de parseInt (debería ser 96): -> ${categoryIdAsNumber}`);
-        console.log(`4. Tipo de dato después de parseInt (debería ser "number"): -> ${typeof categoryIdAsNumber}`);
-        // --- FIN DE LA DEPURACIÓN ---
-        // ==========================================================
+        const categoryIdAsNumber = parseInt(process.env.WORDPRESS_EVENTS_CATEGORY_ID, 10);
 
         const postData = {
           title: `Plan de Noche: Disfruta de ${event.name}`,
@@ -69,11 +73,6 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
           categories: [categoryIdAsNumber],
           featured_media: imageId,
         };
-
-        console.log('5. Objeto final que se envía a WordPress:');
-        console.log(JSON.stringify(postData, null, 2));
-        console.log("---------------------------------");
-
 
         const wordpressResponse = await publishToWordPress(postData);
 
@@ -96,5 +95,4 @@ Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encont
   }
 }
 
-// Añade esta línea al final
-module.exports = { runPublishingBatch: main }; // Exportamos la función 'main' con un nombre más claro
+main();
