@@ -19,7 +19,7 @@ console.log("✅ 5/5: Módulo 'imageGenerator.js' cargado.");
 
 console.log("--- Todos los módulos cargados. Iniciando función main() ---");
 
-const BATCH_SIZE = 1;
+const BATCH_SIZE = 10;
 
 async function main() {
   console.log('Iniciando el publicador de contenidos...');
