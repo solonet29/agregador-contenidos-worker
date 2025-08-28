@@ -1,4 +1,4 @@
-// publish-content.js (VERSIÓN DEPURADA Y SANAEADA)
+// publish-content.js (VERSIÓN FINAL Y COMPLETA)
 
 console.log("--- Ejecutando publish-content.js v3 (Depurando Módulos) ---");
 
@@ -8,7 +8,7 @@ console.log("✅ 1/5: Módulo 'dotenv' cargado.");
 const { connectToDatabase } = require('./lib/database.js');
 console.log("✅ 2/5: Módulo 'database.js' cargado.");
 
-const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
+const { publishToWordPress, uploadImage, deleteWordPressPost } = require('./lib/wordpressClient.js');
 console.log("✅ 3/5: Módulo 'wordpressClient.js' cargado.");
 
 const showdown = require('showdown');
@@ -32,6 +32,17 @@ const rl = readline.createInterface({
 console.log("--- Todos los módulos cargados. Iniciando función main() ---");
 
 const BATCH_SIZE = 10;
+
+/**
+ * Pide al usuario confirmación por consola.
+ * @param {string} query - El mensaje de confirmación.
+ * @returns {Promise<boolean>} Retorna true si el usuario confirma.
+ */
+async function askQuestion(query) {
+  return new Promise(resolve => rl.question(query, ans => {
+    resolve(ans.toLowerCase() === 's' || ans.toLowerCase() === 'y');
+  }));
+}
 
 /**
  * Verifica si un evento está relacionado con el flamenco utilizando Gemini.
@@ -58,17 +69,6 @@ async function verifyFlamencoWithGemini(eventData) {
     console.error('Error al verificar el evento con Gemini:', error);
   }
   return false;
-}
-
-/**
- * Pide al usuario confirmación por consola.
- * @param {string} query - El mensaje de confirmación.
- * @returns {Promise<boolean>} Retorna true si el usuario confirma.
- */
-async function askQuestion(query) {
-  return new Promise(resolve => rl.question(query, ans => {
-    resolve(ans.toLowerCase() === 's' || ans.toLowerCase() === 'y');
-  }));
 }
 
 async function main() {
@@ -121,7 +121,12 @@ async function main() {
           throw new Error('La subida de la imagen falló, no se puede continuar con el post.');
         }
 
-        // --- CORRECCIÓN Y ADICIÓN DE LA URL DE LA TIENDA ---
+        const eventDate = new Date(event.date);
+        const dateOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Madrid' };
+        const formattedDate = eventDate.toLocaleDateString('es-ES', dateOptions);
+
+        const header = `**Artista:** ${event.artist}\n**Fecha:** ${formattedDate}\n\n---`;
+
         const footer = `
 ---
 ### ¿Buscas el atuendo perfecto?
@@ -131,7 +136,7 @@ Visita nuestra [Tienda Flamenca](https://afland.es/la-tienda-flamenca-afland/) p
 [Contacta con nosotros](https://afland.es/contact/) para publicitar tu evento en Duende Finder.
 ➡️ **[Ver todos los detalles de este evento en Duende Finder](https://buscador.afland.es/?event_id=${event._id})**`;
 
-        const markdownContent = `${event.nightPlan}\n\n${footer}`;
+        const markdownContent = `${header}\n\n${event.nightPlan}\n\n${footer}`;
         const htmlContent = converter.makeHtml(markdownContent);
 
         const publicationDate = new Date();

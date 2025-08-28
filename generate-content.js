@@ -1,14 +1,18 @@
+// generate-content.js (VERSIÓN FINAL Y COMPLETA)
+
 console.log("--- Ejecutando generate-content.js v2 (con logger) ---");
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const readline = require('readline');
 const { ObjectId } = require('mongodb');
+const showdown = require('showdown');
 
 // --- LÓGICA DE GEMINI ---
 if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY no está definida.');
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const converter = new showdown.Converter();
 
 const nightPlanPromptTemplate = (event) => `
     Eres "Duende", un conocedor local y aficionado al flamenco.
@@ -49,11 +53,11 @@ async function askQuestion(query) {
 /**
  * Verifica si un evento está relacionado con el flamenco utilizando Gemini.
  * @param {object} eventData - Datos del evento (artista, nombre, descripción).
- * @returns {Promise<string>} Retorna 'flamenco', 'no-flamenco' o 'dudoso'.
+ * @returns {Promise<boolean>} Retorna true si es flamenco, false en caso contrario.
  */
 async function verifyFlamencoWithGemini(eventData) {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `Analiza la siguiente información de un evento. Responde con "flamenco", "no-flamenco" o "dudoso" si no estás seguro. NO añadas texto adicional.
+    const prompt = `Analiza la siguiente información de un evento. Responde SÓLO con "flamenco" o "no-flamenco". NO añadas texto adicional.
     
     Nombre: ${eventData.name}
     Artista: ${eventData.artist}
@@ -65,39 +69,23 @@ async function verifyFlamencoWithGemini(eventData) {
         const result = await model.generateContent(prompt);
         const text = result.response.text().trim().toLowerCase();
 
-        if (text.includes('flamenco') && !text.includes('no-flamenco') && !text.includes('dudoso')) {
-            return 'flamenco';
+        if (text.includes('flamenco') && !text.includes('no-flamenco')) {
+            return true;
         }
-        if (text.includes('no-flamenco')) {
-            return 'no-flamenco';
-        }
-        return 'dudoso'; // Por defecto, si la respuesta no es clara, la marcamos como dudosa
     } catch (error) {
         console.error('Error al verificar el evento con Gemini:', error);
     }
-    return 'dudoso';
+    return false;
 }
 
 async function generateContentForEvent(db, event) {
     console.log(`🔥 Procesando contenido para: "${event.name}"`);
 
-    // --- NUEVO: Saneamiento de eventos con 3 estados ---
-    const classification = await verifyFlamencoWithGemini(event);
-    if (classification === 'no-flamenco') {
-        console.warn(`🗑️ El evento "${event.name}" ha sido clasificado automáticamente como no-flamenco y será eliminado.`);
+    // --- Saneamiento de eventos ---
+    const isFlamenco = await verifyFlamencoWithGemini(event);
+    if (!isFlamenco) {
+        console.warn(`⚠️ El evento "${event.name}" no parece ser de flamenco. Eliminando de la base de datos.`);
         await db.collection('events').deleteOne({ _id: new ObjectId(event._id) });
-        return; // No continuar con la generación de contenido
-    }
-
-    if (classification === 'dudoso') {
-        console.warn(`⚠️ El evento "${event.name}" ha sido clasificado como dudoso.`);
-        const confirm = await askQuestion('¿Quieres eliminar este evento de la base de datos? (s/n): ');
-        if (confirm) {
-            await db.collection('events').deleteOne({ _id: new ObjectId(event._id) });
-            console.log(`🗑️ Evento "${event.name}" eliminado por confirmación manual.`);
-        } else {
-            console.log(`⏭️  Evento "${event.name}" no eliminado. Se omitirá la generación de contenido para este.`);
-        }
         return; // No continuar con la generación de contenido
     }
 
@@ -109,16 +97,21 @@ async function generateContentForEvent(db, event) {
         throw new Error("La respuesta de la IA para el plan no tiene el formato esperado.");
     }
 
+    // Montar el contenido completo del post
+    const { title, htmlContent } = createFinalPostContent(event, nightPlanText);
+
     await db.collection('events').updateOne(
         { _id: new ObjectId(event._id) },
         {
             $set: {
                 nightPlan: nightPlanText,
+                blogPostHtml: htmlContent,
+                blogPostTitle: title,
                 contentGenerationDate: new Date()
             }
         }
     );
-    console.log(`💾 Plan de noche para "${event.name}" guardado.`);
+    console.log(`💾 Contenido completo y plan de noche para "${event.name}" guardado.`);
 }
 
 
