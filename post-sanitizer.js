@@ -53,7 +53,7 @@ async function sanitizeOldPosts() {
                 const footer = `
 ---
 ### ¿Buscas el atuendo perfecto?
-Visita nuestra [Tienda Flamenca](https://afland.es/tienda-flamenca/) para encontrar moda y accesorios únicos.
+Visita nuestra [Tienda Flamenca](https://afland.es/la-tienda-flamenca-afland/) para encontrar moda y accesorios únicos.
 ➡️ **[Ver todos los detalles de este evento en Duende Finder](https://buscador.afland.es/?event_id=${event._id})**`;
 
                 // Se unen las 3 partes: cabecera + plan de noche existente + footer
