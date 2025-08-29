@@ -1,4 +1,4 @@
-// post-sanitizer.js (VERSIÓN PROFESIONAL REFACTORIZADA)
+// post-sanitizer.js (VERSIÓN CORREGIDA FINAL)
 
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
@@ -47,7 +47,8 @@ async function sanitizePosts() {
     if (flags.dryRun) console.log('⚠️  MODO SIMULACIÓN ACTIVADO (--dry-run). No se realizarán cambios reales.');
 
     try {
-        const { db } = await connectToDatabase();
+        // --- LÍNEA CORREGIDA ---
+        const db = await connectToDatabase();
         const eventsCollection = db.collection('events');
 
         const query = {
