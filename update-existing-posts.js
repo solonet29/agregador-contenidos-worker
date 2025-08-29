@@ -1,90 +1,98 @@
-// update-existing-posts.js (El "Revisor de Contenido")
+// update-existing-posts.js
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
-const { updatePost, getPost } = require('./lib/wordpressClient.js'); // Necesitamos getPost y updatePost
+const { updatePost, getPost } = require('./lib/wordpressClient.js');
 const { ObjectId } = require('mongodb');
 
 // --- CONFIGURACIÓN DE BANNERS ---
-// Reemplaza estas URLs con las que obtuviste de la biblioteca de medios de WordPress.
-const BANNER_URL_M2 = 'https://afland.es/wp-content/uploads/2025/08/banner_publicidad_restaurantes.jpg';
-const BANNER_URL_M3 = 'https://afland.es/wp-content/uploads/2025/08/banner_publicidad_hoteles.jpg';
+// Define las URLs de los banners que necesitas reemplazar.
+const BANNER_URL_M2_INCORRECTA = 'http://afland.es/wp-content/uploads/2025/08/banner_publicidad_restaurantes.jpg';
+const BANNER_URL_M3_INCORRECTA = 'http://afland.es/wp-content/uploads/2025/08/banner_publicidad_hoteles.jpg';
 
-// --- FUNCIÓN PARA GENERAR EL HTML DE LOS BANNERS ---
-function createBannersHtml() {
-    return `
-        <div class="banner-container" style="text-align: center; margin: 30px 0;">
-            <a href="#">
-                <img src="${BANNER_URL_M2}" alt="Publicidad de AFland Restaurantes..." style="max-width: 100%; height: auto; margin-bottom: 20px;" />
-            </a>
-            <a href="#">
-                <img src="${BANNER_URL_M3}" alt="Publicidad de AFland Hoteles, Salas..." style="max-width: 100%; height: auto;" />
-            </a>
-        </div>
-    `;
-}
+// Define las URLs correctas para los banners.
+const BANNER_URL_M2_CORRECTA = 'https://afland.es/wp-content/uploads/2025/08/banner_publicidad_restaurantes.jpg';
+const BANNER_URL_M3_CORRECTA = 'https://afland.es/wp-content/uploads/2025/08/banner_publicidad_hoteles.jpg';
 
-// --- FUNCIÓN PRINCIPAL DE ACTUALIZACIÓN ---
-async function updatePostsWithBanners() {
-    console.log("--- 🚀 INICIANDO INYECCIÓN DE BANNERS EN POSTS EXISTENTES ---");
+// --- FUNCIÓN PRINCIPAL DE CORRECCIÓN ---
+async function fixBannerUrls() {
+    console.log("--- 🚀 INICIANDO CORRECCIÓN PUNTUAL DE URLs DE BANNERS EN POSTS EXISTENTES ---");
 
     try {
         const db = await connectToDatabase();
         const eventsCollection = db.collection('events');
 
-        // La consulta busca los eventos que ya han sido publicados en WordPress
-        // pero que no tienen nuestra bandera 'hasBanners' para evitar duplicados.
+        // La consulta ahora busca todos los eventos que tienen un campo image_id.
         const query = {
-            blogPostId: { $exists: true, $ne: null },
-            hasBanners: { $exists: false }
+            image_id: { $exists: true, $ne: null }
         };
-        const eventsToUpdate = await eventsCollection.find(query).toArray();
 
-        if (eventsToUpdate.length === 0) {
-            console.log("✅ No se encontraron posts para actualizar con banners.");
+        const eventsToProcess = await eventsCollection.find(query).toArray();
+
+        if (eventsToProcess.length === 0) {
+            console.log("✅ No se encontraron posts para verificar.");
             return;
         }
 
-        console.log(`⚙️ Se encontraron ${eventsToUpdate.length} posts para actualizar.`);
-        const bannersHtml = createBannersHtml();
+        console.log(`⚙️ Se encontraron ${eventsToProcess.length} posts para procesar.`);
 
-        for (const event of eventsToUpdate) {
+        for (const event of eventsToProcess) {
             console.log(`\n-----------------------------------------------------`);
-            console.log(`🔄 Procesando post para el evento: "${event.name}"`);
+            console.log(`🔄 Procesando post para el evento: "${event.name}" (ID de WordPress: ${event.blogPostId})`);
 
             try {
-                // 1. OBTENER el contenido actual del post de WordPress usando su ID.
+                // 1. Obtener el contenido actual del post de WordPress.
                 const wordpressPost = await getPost(event.blogPostId);
 
                 if (!wordpressPost) {
-                    console.warn(`   ⚠️ No se pudo encontrar el post con ID ${event.blogPostId}. Omitiendo.`);
+                    console.warn(`   ⚠️ No se pudo encontrar el post con ID ${event.blogPostId}. Omitiendo.`);
                     continue;
                 }
 
-                // 2. MODIFICAR el contenido: Inyectar los banners al final del contenido existente.
-                const updatedContent = wordpressPost.content.rendered + bannersHtml;
+                let originalContent = wordpressPost.content.rendered;
+                let updatedContent = originalContent;
+                let changesMade = false;
 
-                // 3. ENVIAR la actualización a WordPress. Usamos el título original y el nuevo contenido.
-                await updatePost(event.blogPostId, wordpressPost.title.rendered, updatedContent);
-
-                // 4. ACTUALIZAR la base de datos para no procesar este evento de nuevo.
-                await eventsCollection.updateOne(
-                    { _id: new ObjectId(event._id) },
-                    { $set: { hasBanners: true, lastUpdate: new Date() } }
+                // 2. Reemplazar las URLs incorrectas por las correctas.
+                const newContent = updatedContent.replace(
+                    new RegExp(BANNER_URL_M2_INCORRECTA, 'g'),
+                    BANNER_URL_M2_CORRECTA
                 );
 
-                console.log(`   ✅ Post ${event.blogPostId} actualizado exitosamente.`);
+                const finalContent = newContent.replace(
+                    new RegExp(BANNER_URL_M3_INCORRECTA, 'g'),
+                    BANNER_URL_M3_CORRECTA
+                );
+
+                if (originalContent !== finalContent) {
+                    changesMade = true;
+                    updatedContent = finalContent;
+                }
+
+                // 3. Solo actualizar si hubo cambios.
+                if (changesMade) {
+                    await updatePost(event.blogPostId, wordpressPost.title.rendered, updatedContent);
+                    console.log(`   ✅ URLs corregidas y post ${event.blogPostId} actualizado exitosamente.`);
+
+                    // 4. Marcar en la base de datos que este post ya ha sido corregido.
+                    await eventsCollection.updateOne(
+                        { _id: new ObjectId(event._id) },
+                        { $set: { urlsCorrected: true, correctionDate: new Date() } }
+                    );
+                } else {
+                    console.log(`   🔍 No se encontraron URLs incorrectas en este post. No se requiere corrección.`);
+                }
 
             } catch (error) {
-                console.error(`   ❌ Error al inyectar banners en el post "${event.name}":`, error.message);
+                console.error(`   ❌ Error al procesar el post "${event.name}":`, error.message);
             }
         }
 
     } catch (error) {
         console.error("Ha ocurrido un error fatal:", error);
     } finally {
-        console.log("\n--- ✨ PROCESO FINALIZADO ---");
+        console.log("\n--- ✨ PROCESO DE CORRECCIÓN FINALIZADO ---");
         process.exit(0);
     }
 }
 
-updatePostsWithBanners();
+fixBannerUrls();

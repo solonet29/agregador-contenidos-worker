@@ -19,7 +19,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 const converter = new showdown.Converter();
 
-const nightPlanPromptTemplate = (event) => `...`; // (El prompt completo de nightPlan va aquí)
+
 function createFinalPostContent(event, nightPlanText) { /* ... (La función completa va aquí) ... */ }
 async function verifyFlamencoWithGemini(eventData) { /* ... (La función completa de verificación va aquí) ... */ }
 
