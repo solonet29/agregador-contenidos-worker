@@ -11,7 +11,7 @@ const QUERY = {
     imageUrl: { $exists: false },
     lastImageUpdate: { $exists: true }
 };
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 200;
 
 async function rescueImages() {
     console.log("--- 🚑 INICIANDO RESCATE DE IMÁGENES ---");

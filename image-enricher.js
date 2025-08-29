@@ -9,8 +9,8 @@ const fs = require('fs').promises; // Usamos la versión de promesas de fs
 
 // --- CONFIGURACIÓN ---
 // Ahora la query busca específicamente eventos sin una URL de imagen
-const QUERY = { imageUrl: { $exists: false } };
-const BATCH_SIZE = 100;
+const QUERY = { lastImageUpdate: { $exists: false } };
+const BATCH_SIZE = 200;
 
 async function enrichImages() {
     console.log("--- 🚀 INICIANDO ENRIQUECEDOR DE IMÁGENES ---");
