@@ -1,6 +1,6 @@
-// generate-content.js (VERSIÓN FINAL Y COMPLETA)
+// content-creator.js (VERSIÓN CORREGIDA Y MEJORADA)
 
-console.log("--- Ejecutando generate-content.js v2 (con logger) ---");
+console.log("--- Ejecutando content-creator.js v2.1 (corregido y mejorado) ---");
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -51,24 +51,52 @@ async function askQuestion(query) {
 }
 
 /**
+ * **NUEVA FUNCIÓN AÑADIDA**
+ * Construye el título y el contenido HTML final para el post del blog.
+ * @param {object} event - El objeto del evento.
+ * @param {string} nightPlanText - El plan de noche en formato Markdown generado por la IA.
+ * @returns {{title: string, htmlContent: string}} El título y el contenido en HTML.
+ */
+function createFinalPostContent(event, nightPlanText) {
+    // Crear un título SEO optimizado
+    const title = `${event.name} en ${event.city}: Guía para una Noche Flamenca Inolvidable`;
+
+    // Convertir el plan de noche de Markdown a HTML
+    const nightPlanHtml = converter.makeHtml(nightPlanText);
+
+    // Crear una introducción para el post
+    const introHtml = `
+        <p>El flamenco es más que un espectáculo; es una experiencia que envuelve todos los sentidos. Si tienes la suerte de asistir a la actuación de <strong>${event.artist || event.name}</strong> en <strong>${event.venue}</strong>, te hemos preparado una guía para que tu velada sea redonda, desde las tapas previas hasta la última copa.</p>
+        <p>Descubre cómo vivir una noche flamenca completa en ${event.city}.</p>
+    `;
+
+    // Combinar todo en el contenido final
+    const htmlContent = introHtml + nightPlanHtml;
+
+    return { title, htmlContent };
+}
+
+
+/**
  * Verifica si un evento está relacionado con el flamenco utilizando Gemini.
  * @param {object} eventData - Datos del evento (artista, nombre, descripción).
  * @returns {Promise<boolean>} Retorna true si es flamenco, false en caso contrario.
  */
 async function verifyFlamencoWithGemini(eventData) {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `Analiza la siguiente información de un evento. Responde SÓLO con "flamenco" o "no-flamenco". NO añadas texto adicional.
-    
-    Nombre: ${eventData.name}
+
+    // --- PROMPT MEJORADO ---
+    const prompt = `En el contexto de una agenda cultural de música en España, analiza la siguiente información y determina si se trata de un evento de flamenco. Considera que nombres de artistas como 'Argentina' o 'Arcángel' son cantaores de flamenco muy conocidos, aunque el nombre pueda parecer genérico. Responde SÓLO con "flamenco" o "no-flamenco".
+
+    Nombre del evento: ${eventData.name}
     Artista: ${eventData.artist}
-    Descripción: ${eventData.description}
-    
-    ¿Es este un evento de flamenco?`;
+    Descripción: ${eventData.description}`;
 
     try {
         const result = await model.generateContent(prompt);
         const text = result.response.text().trim().toLowerCase();
 
+        // La lógica de comprobación se mantiene, es robusta.
         if (text.includes('flamenco') && !text.includes('no-flamenco')) {
             return true;
         }

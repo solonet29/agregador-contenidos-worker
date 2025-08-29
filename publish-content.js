@@ -1,86 +1,32 @@
-// publish-content.js (VERSIÓN FINAL Y COMPLETA)
+// publish-content.js (VERSIÓN CORREGIDA Y SIMPLIFICADA)
 
-console.log("--- Ejecutando publish-content.js v3 (Depurando Módulos) ---");
+console.log("--- Ejecutando publish-content.js v4 (Sincronizado) ---");
 
 require('dotenv').config();
-console.log("✅ 1/5: Módulo 'dotenv' cargado.");
-
 const { connectToDatabase } = require('./lib/database.js');
-console.log("✅ 2/5: Módulo 'database.js' cargado.");
-
-const { publishToWordPress, uploadImage, deleteWordPressPost } = require('./lib/wordpressClient.js');
-console.log("✅ 3/5: Módulo 'wordpressClient.js' cargado.");
-
-const showdown = require('showdown');
-console.log("✅ 4/5: Módulo 'showdown' cargado.");
-
+const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
 const { createSocialImage } = require('./lib/imageGenerator.js');
-console.log("✅ 5/5: Módulo 'imageGenerator.js' cargado.");
-
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const readline = require('readline');
 
-// Configuración de clientes para la verificación con Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+// NOTA: Se eliminan los módulos 'readline' y 'showdown' porque ya no son necesarios aquí.
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout
-});
-
-console.log("--- Todos los módulos cargados. Iniciando función main() ---");
+console.log("--- Módulos cargados. Iniciando función main() ---");
 
 const BATCH_SIZE = 10;
 
-/**
- * Pide al usuario confirmación por consola.
- * @param {string} query - El mensaje de confirmación.
- * @returns {Promise<boolean>} Retorna true si el usuario confirma.
- */
-async function askQuestion(query) {
-  return new Promise(resolve => rl.question(query, ans => {
-    resolve(ans.toLowerCase() === 's' || ans.toLowerCase() === 'y');
-  }));
-}
-
-/**
- * Verifica si un evento está relacionado con el flamenco utilizando Gemini.
- * @param {object} eventData - Datos del evento (artista, nombre, descripción).
- * @returns {Promise<boolean>} Retorna true si es flamenco, false en caso contrario.
- */
-async function verifyFlamencoWithGemini(eventData) {
-  const prompt = `Analiza la siguiente información de un evento. Responde SÓLO con "flamenco" o "no-flamenco". NO añadas texto adicional.
-    
-    Nombre: ${eventData.name}
-    Artista: ${eventData.artist}
-    Descripción: ${eventData.description}
-    
-    ¿Es este un evento de flamenco?`;
-
-  try {
-    const result = await geminiModel.generateContent(prompt);
-    const text = result.response.text().trim().toLowerCase();
-
-    if (text.includes('flamenco') && !text.includes('no-flamenco')) {
-      return true;
-    }
-  } catch (error) {
-    console.error('Error al verificar el evento con Gemini:', error);
-  }
-  return false;
-}
-
 async function main() {
   console.log('Iniciando el publicador de contenidos...');
+  let dbClient;
   try {
-    const db = await connectToDatabase();
+    const { db, client } = await connectToDatabase();
+    dbClient = client; // Guardar cliente para cerrarlo en finally
     const eventsCollection = db.collection('events');
 
     const eventsToPublish = await eventsCollection.find({
-      nightPlan: { $exists: true, $ne: null },
-      wordpressPostId: { $exists: false },
-      name: { $exists: true, $ne: "" }
+      // Buscamos directamente los campos que necesitamos para publicar
+      blogPostTitle: { $exists: true, $ne: "" },
+      blogPostHtml: { $exists: true, $ne: "" },
+      wordpressPostId: { $exists: false }
     }).limit(BATCH_SIZE).toArray();
 
     if (eventsToPublish.length === 0) {
@@ -89,55 +35,33 @@ async function main() {
     }
 
     console.log(`⚙️ Se encontraron ${eventsToPublish.length} eventos para publicar.`);
-    const converter = new showdown.Converter();
 
     for (const [index, event] of eventsToPublish.entries()) {
-      // --- PASO DE SANEAMIENTO: Validación de Flamenco (NUEVO) ---
-      const isFlamenco = await verifyFlamencoWithGemini(event);
-      if (!isFlamenco) {
-        console.log('\n--- Evento con contenido dudoso ---');
-        console.log(`Nombre: ${event.name}`);
-        console.log(`Artista: ${event.artist}`);
-        console.log(`Lugar: ${event.venue} en ${event.address}`);
-        console.log('------------------------------------\n');
-
-        const confirm = await askQuestion('¿Quieres eliminar este evento de la base de datos? (s/n): ');
-        if (confirm) {
-          await eventsCollection.deleteOne({ _id: event._id });
-          console.log(`🗑️ Evento '${event.name}' eliminado de la base de datos.`);
-          continue; // Saltar al siguiente evento en el bucle
-        } else {
-          console.log(`⏭️ Evento '${event.name}' no eliminado. Se omitirá la publicación.`);
-          continue;
-        }
-      }
-
       try {
-        console.log(`Creando imagen para "${event.name}"...`);
+        console.log(`\nProcessing event: "${event.blogPostTitle}"`);
+
+        console.log(`1/4: Creando imagen para "${event.name}"...`);
         const imagePath = await createSocialImage(event);
 
+        console.log(`2/4: Subiendo imagen a WordPress...`);
         const imageId = await uploadImage(imagePath, event.name);
         if (!imageId) {
           throw new Error('La subida de la imagen falló, no se puede continuar con el post.');
         }
 
-        const eventDate = new Date(event.date);
-        const dateOptions = { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Madrid' };
-        const formattedDate = eventDate.toLocaleDateString('es-ES', dateOptions);
+        // --- CAMBIO CLAVE ---
+        // Ya no reconstruimos el contenido. Usamos directamente lo que generó content-creator.js
+        const postTitle = event.blogPostTitle;
+        const postContent = event.blogPostHtml;
 
-        const header = `**Artista:** ${event.artist}\n**Fecha:** ${formattedDate}\n\n---`;
-
+        // Se añade el footer directamente al contenido que ya existe
         const footer = `
----
-### ¿Buscas el atuendo perfecto?
-Visita nuestra [Tienda Flamenca](https://afland.es/la-tienda-flamenca-afland/) para encontrar moda y accesorios únicos.
+                <hr>
+                <h3>¿Buscas el atuendo perfecto?</h3>
+                <p>Visita nuestra <a href="https://afland.es/la-tienda-flamenca-afland/">Tienda Flamenca</a> para encontrar moda y accesorios únicos.</p>
+                <p>➡️ <strong><a href="https://buscador.afland.es/?event_id=${event._id}">Ver todos los detalles de este evento en Duende Finder</a></strong></p>`;
 
-### ¿Quieres ver tu negocio aquí?
-[Contacta con nosotros](https://afland.es/contact/) para publicitar tu evento en Duende Finder.
-➡️ **[Ver todos los detalles de este evento en Duende Finder](https://buscador.afland.es/?event_id=${event._id})**`;
-
-        const markdownContent = `${header}\n\n${event.nightPlan}\n\n${footer}`;
-        const htmlContent = converter.makeHtml(markdownContent);
+        const finalHtmlContent = postContent + footer;
 
         const publicationDate = new Date();
         publicationDate.setHours(publicationDate.getHours() + index + 1);
@@ -145,22 +69,24 @@ Visita nuestra [Tienda Flamenca](https://afland.es/la-tienda-flamenca-afland/) p
         const categoryIdAsNumber = parseInt(process.env.WORDPRESS_EVENTS_CATEGORY_ID, 10);
 
         const postData = {
-          title: `Plan de Noche: Disfruta de ${event.name}`,
-          content: htmlContent,
+          title: postTitle,
+          content: finalHtmlContent,
           status: 'future',
           date: publicationDate.toISOString(),
           categories: [categoryIdAsNumber],
           featured_media: imageId,
         };
 
+        console.log(`3/4: Publicando post en WordPress...`);
         const wordpressResponse = await publishToWordPress(postData);
 
+        console.log(`4/4: Actualizando evento en la base de datos...`);
         await eventsCollection.updateOne(
           { _id: event._id },
           { $set: { contentStatus: 'published', wordpressPostId: wordpressResponse.id, publicationDate: publicationDate, blogPostUrl: wordpressResponse.link } }
         );
 
-        console.log(`✅ Post para "${event.name}" programado con éxito.`);
+        console.log(`✅ Post para "${event.name}" programado con éxito. URL: ${wordpressResponse.link}`);
 
       } catch (error) {
         console.error(`❌ Error procesando el evento "${event.name}":`, error.message);
@@ -170,8 +96,8 @@ Visita nuestra [Tienda Flamenca](https://afland.es/la-tienda-flamenca-afland/) p
   } catch (error) {
     console.error('Ha ocurrido un error fatal en el publicador:', error);
   } finally {
+    // Se elimina rl.close() y se añade el cierre de la conexión a la BBDD si es necesario
     console.log('Proceso de publicación finalizado.');
-    rl.close();
   }
 }
 
