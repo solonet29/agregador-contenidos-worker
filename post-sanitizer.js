@@ -1,185 +1,93 @@
-// post-sanitizer.js (VERSIÓN 4.1 - CON SINCRONIZACIÓN DE URL)
+// post-sanitizer.js (V6 - MODO INYECCIÓN HTML)
 
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
-const { updateWordPressPost, uploadImage, deleteWordPressPost } = require('./lib/wordpressClient.js');
-const { createSocialImage } = require('./lib/imageGenerator.js');
+const { updateWordPressPost } = require('./lib/wordpressClient.js');
 const { ObjectId } = require('mongodb');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const showdown = require('showdown');
 
-// --- CONFIGURACIÓN DE IA ---
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-const converter = new showdown.Converter();
+// NOTA: No se requiere @google/generative-ai ni showdown. Es independiente.
 
 // --- ANÁLISIS DE FLAGS DE LÍNEA DE COMANDOS ---
 const args = process.argv.slice(2);
 const flags = {
-    dryRun: args.includes('--dry-run'),
-    regenerateImages: args.includes('--regenerate-images'),
-    deleteNonFlamenco: args.includes('--delete-non-flamenco')
+    dryRun: args.includes('--dry-run')
 };
 
-// --- LÓGICA DE GENERACIÓN DE CONTENIDO (IMPORTADA DE CONTENT-CREATOR) ---
-const nightPlanPromptTemplate = (event) => `
-    Eres "Duende", un conocedor local y aficionado al flamenco.
-    Tu tarea es generar una mini-guía para una noche perfecta centrada en un evento de flamenco.
-    Sé cercano, usa un lenguaje evocador y estructura el plan en secciones con Markdown (usando ## para los títulos).
-
-    **REGLA MUY IMPORTANTE: Tu respuesta debe empezar DIRECTAMENTE con el primer título en Markdown (##). No incluyas saludos, introducciones o texto conversacional antes de la guía.**
-
-    EVENTO:
-    - Nombre: ${event.name}
-    - Artista: ${event.artist}
-    - Lugar: ${event.venue}, ${event.city}
-    ESTRUCTURA DE LA GUÍA:
-    1.  **Un Pellizco de Sabiduría:** Aporta un dato curioso o una anécdota sobre el artista, el lugar o algún palo del flamenco relacionado.
-    2.  **Calentando Motores (Antes del Espectáculo):** Recomienda 1 o 2 bares de tapas o restaurantes cercanos al lugar del evento, describiendo el ambiente.
-    3.  **El Templo del Duende (El Espectáculo):** Describe brevemente qué se puede esperar del concierto, centrando en la emoción.
-    4.  **Para Alargar la Magia (Después del Espectáculo):** Sugiere un lugar cercano para tomar una última copa en un ambiente relajado.
-
-    Usa un tono inspirador y práctico.
-`;
-
-function createFinalPostContent(event, nightPlanText) {
-    const title = `${event.name} en ${event.city}: Guía para una Noche Flamenca Inolvidable`;
-    const nightPlanHtml = converter.makeHtml(nightPlanText);
-    const introHtml = `
-        <p>El flamenco es más que un espectáculo; es una experiencia que envuelve todos los sentidos. Si tienes la suerte de asistir a la actuación de <strong>${event.artist || event.name}</strong> en <strong>${event.venue}</strong>, te hemos preparado una guía para que tu velada sea redonda, desde las tapas previas hasta la última copa.</p>
-        <p>Descubre cómo vivir una noche flamenca completa en ${event.city}.</p>
-    `;
-    const htmlContent = introHtml + nightPlanHtml;
-    return { title, htmlContent };
-}
-
-async function verifyFlamencoWithGemini(eventData) {
-    const prompt = `Eres un experto clasificador para una web de flamenco. Tu criterio debe ser inclusivo con artistas que fusionan el flamenco con otros géneros (como soul o jazz), pero sin llegar al pop mainstream. Si un evento o artista tiene una fuerte conexión con el flamenco, clasifícalo como "flamenco". Artistas como Pitingo, Argentina o Arcángel son de interés para el público flamenco.
-
-Analiza la siguiente información y responde SÓLO con "flamenco" o "no-flamenco".
-
-Nombre del evento: ${eventData.name}
-Artista: ${eventData.artist}
-Descripción: ${eventData.description}`;
-
-    try {
-        const result = await geminiModel.generateContent(prompt);
-        const text = result.response.text().trim().toLowerCase();
-        return text.includes('flamenco') && !text.includes('no-flamenco');
-    } catch (error) {
-        console.error('Error al verificar el evento con Gemini:', error);
-        return false;
-    }
-}
-
-async function sanitizePosts() {
-    console.log('--- INICIANDO SANEADOR DE POSTS (V4.1 - CON SYNC DE URL) ---');
+async function injectCta() {
+    console.log('--- INICIANDO SCRIPT DE INYECCIÓN DE CTA ---');
     if (flags.dryRun) console.log('⚠️  MODO SIMULACIÓN ACTIVADO (--dry-run). No se realizarán cambios reales.');
 
     try {
         const db = await connectToDatabase();
         const eventsCollection = db.collection('events');
 
+        // --- BLOQUE HTML A INYECTAR ---
+        // Pega aquí las URLs de las imágenes horizontales que acabas de subir a WordPress
+        const ctaBlockHtml = `
+            <hr>
+            <h2>¿Quieres ver tu negocio aquí?</h2>
+            <p>Destaca tu bar, restaurante, hotel o tienda ante miles de aficionados al flamenco. <a href="https://afland.es/contact/" target="_blank" rel="noopener">Contacta con nosotros</a> y descubre nuestras opciones de patrocinio.</p>
+            
+            <img src="URL_DE_TU_IMAGEN_HORIZONTAL_1" alt="Publicidad para restaurantes y tablaos flamencos" style="width:100%; height:auto; margin:10px 0; border:1px solid #ddd; border-radius:4px; aspect-ratio: 16/9; object-fit: cover;">
+            
+            <img src="URL_DE_TU_IMAGEN_HORIZONTAL_2" alt="Publicidad para hoteles y alojamientos con encanto" style="width:100%; height:auto; margin:10px 0; border:1px solid #ddd; border-radius:4px; aspect-ratio: 16/9; object-fit: cover;">
+        `;
+
+        // Query para encontrar posts que ya tienen contenido pero NO tienen nuestro nuevo bloque
         const query = {
             wordpressPostId: { $exists: true },
-            $or: [
-                { blogPostHtml: { $exists: false } },
-                { nightPlan: { $exists: false } }
-            ]
+            blogPostHtml: { $exists: true, $not: /¿Quieres ver tu negocio aquí?/i }
         };
-        const postsToSanitize = await eventsCollection.find(query).toArray();
+        const postsToUpdate = await eventsCollection.find(query).toArray();
 
-        if (postsToSanitize.length === 0) {
-            console.log('✅ No se encontraron posts que necesiten saneamiento. ¡El sistema está consistente!');
+        if (postsToUpdate.length === 0) {
+            console.log('✅ No se encontraron posts para actualizar. Parece que todos tienen ya la llamada a la acción.');
             return;
         }
 
-        console.log(`⚙️ Se encontraron ${postsToSanitize.length} posts para regenerar y sanear.`);
+        console.log(`⚙️ Se encontraron ${postsToUpdate.length} posts para inyectar la llamada a la acción.`);
 
-        for (const event of postsToSanitize) {
+        for (const event of postsToUpdate) {
             console.log(`\n-----------------------------------------------------`);
-            console.log(`Analizando evento: "${event.name}" (WP ID: ${event.wordpressPostId})`);
-
-            const isFlamenco = await verifyFlamencoWithGemini(event);
-            if (!isFlamenco) {
-                // ... (lógica de borrado de no-flamenco se mantiene igual)
-                continue;
-            }
+            console.log(`Procesando: "${event.blogPostTitle}" (WP ID: ${event.wordpressPostId})`);
 
             try {
-                let nightPlanText = event.nightPlan;
-                let blogPostTitle = event.blogPostTitle;
-                let blogPostHtml = event.blogPostHtml;
+                // Unimos el contenido existente con nuestro nuevo bloque
+                const newHtmlContent = event.blogPostHtml + ctaBlockHtml;
 
-                if (!nightPlanText) {
-                    console.log('   -> No se encontró nightPlan. Llamando a Gemini para generarlo...');
-                    if (!flags.dryRun) {
-                        const prompt = nightPlanPromptTemplate(event);
-                        const result = await geminiModel.generateContent(prompt);
-                        nightPlanText = result.response.text();
-                    } else {
-                        nightPlanText = "[SIMULACIÓN] Contenido del plan de noche generado por Gemini.";
-                    }
-                }
-
-                if (!blogPostHtml) {
-                    console.log('   -> No se encontró blogPostHtml. Generando contenido final...');
-                    const { title, htmlContent } = createFinalPostContent(event, nightPlanText);
-                    blogPostTitle = title;
-                    blogPostHtml = htmlContent;
-                }
-
-                const updateData = {
-                    title: blogPostTitle,
-                };
-
-                const footer = `
-                <hr>
-                <h3>¿Buscas el atuendo perfecto?</h3>
-                <p>Visita nuestra <a href="https://afland.es/la-tienda-flamenca-afland/">Tienda Flamenca</a> para encontrar moda y accesorios únicos.</p>
-                <p>➡️ <strong><a href="https://buscador.afland.es/?event_id=${event._id}">Ver todos los detalles de este evento en Duende Finder</a></strong></p>`;
-
-                updateData.content = blogPostHtml + footer;
-
-                if (flags.regenerateImages) {
-                    // ... (lógica de regeneración de imágenes se mantiene igual)
-                }
+                // El footer final ("Ver todos los detalles...") se añade en el momento de la publicación.
+                // Aquí solo nos centramos en el cuerpo principal del post.
+                const finalContentForWordPress = newHtmlContent;
 
                 if (!flags.dryRun) {
-                    // --- AJUSTE CLAVE ---
-                    // 1. Capturamos la respuesta de WordPress
-                    const wordpressResponse = await updateWordPressPost(event.wordpressPostId, updateData);
-
-                    // 2. Usamos la respuesta para actualizar NUESTRA base de datos
+                    // Actualizamos la base de datos primero para que sea consistente
                     await eventsCollection.updateOne(
                         { _id: new ObjectId(event._id) },
-                        {
-                            $set: {
-                                nightPlan: nightPlanText,
-                                blogPostTitle: blogPostTitle,
-                                blogPostHtml: blogPostHtml,
-                                blogPostUrl: wordpressResponse.link // ¡Guardamos la URL correcta!
-                            }
-                        }
+                        { $set: { blogPostHtml: newHtmlContent } }
                     );
-                    console.log(`✅ Post actualizado. URL sincronizada: ${wordpressResponse.link}`);
 
+                    // Preparamos los datos para WordPress (solo actualizamos el contenido)
+                    const updateData = {
+                        content: finalContentForWordPress
+                    };
+
+                    await updateWordPressPost(event.wordpressPostId, updateData);
+                    console.log(`✅ CTA inyectado con éxito.`);
                 } else {
-                    console.log(`   [SIMULACIÓN] Se guardaría el contenido regenerado en la BBDD.`);
-                    console.log(`   [SIMULACIÓN] Se actualizaría el post en WordPress y se sincronizaría la URL.`);
+                    console.log(`[SIMULACIÓN] Se inyectaría el bloque de CTA en este post.`);
                 }
 
             } catch (error) {
-                console.error(`❌ Error saneando el evento "${event.name}":`, error.message);
+                console.error(`❌ Error actualizando el evento "${event.name}":`, error.message);
             }
         }
-        console.log(`\n--- PROCESO DE SANEAMIENTO FINALIZADO ---`);
+        console.log(`\n--- PROCESO DE INYECCIÓN FINALIZADO ---`);
 
     } catch (error) {
-        console.error('Ha ocurrido un error fatal durante el saneamiento:', error);
+        console.error('Ha ocurrido un error fatal:', error);
     } finally {
         process.exit(0);
     }
 }
 
-sanitizePosts();
+injectCta();
