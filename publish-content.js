@@ -1,104 +1,93 @@
-// publish-content.js (VERSIÓN CORREGIDA Y SIMPLIFICADA)
 
-console.log("--- Ejecutando publish-content.js v4 (Sincronizado) ---");
+// publish-content.js (Refactorizado como Módulo)
+// OBJETIVO: Tomar eventos enriquecidos, crear su imagen final y publicarlos en WordPress.
 
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
 const { publishToWordPress, uploadImage } = require('./lib/wordpressClient.js');
-const { createSocialImage } = require('./lib/imageGenerator.js');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { createPostImage } = require('./lib/imageGenerator.js');
+const config = require('./config.js'); // Importar la configuración central
 
-// NOTA: Se eliminan los módulos 'readline' y 'showdown' porque ya no son necesarios aquí.
-
-console.log("--- Módulos cargados. Iniciando función main() ---");
-
-const BATCH_SIZE = 10;
-
-async function main() {
-  console.log('Iniciando el publicador de contenidos...');
-  let dbClient;
-  try {
-    const { db, client } = await connectToDatabase();
-    dbClient = client; // Guardar cliente para cerrarlo en finally
+/**
+ * Función principal del módulo.
+ * Procesa un lote de eventos para publicarlos en WordPress.
+ */
+async function publishPosts() {
+    const db = await connectToDatabase();
     const eventsCollection = db.collection('events');
 
-    const eventsToPublish = await eventsCollection.find({
-      // Buscamos directamente los campos que necesitamos para publicar
-      blogPostTitle: { $exists: true, $ne: "" },
-      blogPostHtml: { $exists: true, $ne: "" },
-      wordpressPostId: { $exists: false }
-    }).limit(BATCH_SIZE).toArray();
+    // Buscamos eventos que fueron enriquecidos por el paso anterior
+    const query = {
+        status: 'enriched',
+        wordpressPostId: { $exists: false }
+    };
+
+    const eventsToPublish = await eventsCollection.find(query).limit(config.BATCH_SIZE).toArray();
 
     if (eventsToPublish.length === 0) {
-      console.log('✅ No hay contenido nuevo para publicar en WordPress.');
-      return;
+        console.log('✅ No hay contenido nuevo para publicar en WordPress.');
+        return;
     }
 
     console.log(`⚙️ Se encontraron ${eventsToPublish.length} eventos para publicar.`);
 
     for (const [index, event] of eventsToPublish.entries()) {
-      try {
-        console.log(`\nProcessing event: "${event.blogPostTitle}"`);
+        try {
+            console.log(`   -> Publicando: "${event.blogPostTitle}"`);
 
-        console.log(`1/4: Creando imagen para "${event.name}"...`);
-        const imagePath = await createSocialImage(event);
+            // 1. Crear y subir la imagen social para el post
+            console.log(`      -> 1/3: Creando imagen social...`);
+            const imagePath = await createPostImage(event);
+            const imageUploadResponse = await uploadImage(imagePath, event.name);
+            if (!imageUploadResponse || !imageUploadResponse.id) {
+                throw new Error('La subida de la imagen a WordPress falló.');
+            }
+            const imageId = imageUploadResponse.id;
+            const imageUrl = imageUploadResponse.source_url;
 
-        console.log(`2/4: Subiendo imagen a WordPress...`);
-        const imageId = await uploadImage(imagePath, event.name);
-        if (!imageId) {
-          throw new Error('La subida de la imagen falló, no se puede continuar con el post.');
+            // 2. Preparar el contenido final del post
+            console.log(`      -> 2/3: Preparando contenido final...`);
+            const footer = config.htmlBlocks.postFooter(event);
+            const finalHtmlContent = event.blogPostHtml + footer;
+
+            // Programar la publicación para el futuro para no publicar todo de golpe
+            const publicationDate = new Date();
+            publicationDate.setHours(publicationDate.getHours() + index + 1);
+
+            const postData = {
+                title: event.blogPostTitle,
+                content: finalHtmlContent,
+                status: 'future', // Publicar en el futuro
+                date: publicationDate.toISOString(),
+                categories: [config.WORDPRESS_EVENTS_CATEGORY_ID],
+                featured_media: imageId,
+            };
+
+            // 3. Publicar en WordPress y actualizar la BBDD
+            console.log(`      -> 3/3: Publicando en WordPress...`);
+            const wordpressResponse = await publishToWordPress(postData);
+
+            await eventsCollection.updateOne(
+                { _id: event._id },
+                {
+                    $set: {
+                        status: 'published',
+                        wordpressPostId: wordpressResponse.id,
+                        publicationDate: publicationDate,
+                        blogPostUrl: wordpressResponse.link,
+                        featuredImageId: imageId,
+                        featuredImageUrl: imageUrl // <-- CAMPO AÑADIDO
+                    }
+                }
+            );
+
+            console.log(`   ✅ Post para "${event.name}" programado. URL: ${wordpressResponse.link}`);
+
+        } catch (error) {
+            console.error(`   ❌ Error procesando la publicación de "${event.name}":`, error.message);
         }
-
-        // --- CAMBIO CLAVE ---
-        // Ya no reconstruimos el contenido. Usamos directamente lo que generó content-creator.js
-        const postTitle = event.blogPostTitle;
-        const postContent = event.blogPostHtml;
-
-        // Se añade el footer directamente al contenido que ya existe
-        const footer = `
-                <hr>
-                <h3>¿Buscas el atuendo perfecto?</h3>
-                <p>Visita nuestra <a href="https://afland.es/la-tienda-flamenca-afland/">Tienda Flamenca</a> para encontrar moda y accesorios únicos.</p>
-                <p>➡️ <strong><a href="https://buscador.afland.es/?event_id=${event._id}">Ver todos los detalles de este evento en Duende Finder</a></strong></p>`;
-
-        const finalHtmlContent = postContent + footer;
-
-        const publicationDate = new Date();
-        publicationDate.setHours(publicationDate.getHours() + index + 1);
-
-        const categoryIdAsNumber = parseInt(process.env.WORDPRESS_EVENTS_CATEGORY_ID, 10);
-
-        const postData = {
-          title: postTitle,
-          content: finalHtmlContent,
-          status: 'future',
-          date: publicationDate.toISOString(),
-          categories: [categoryIdAsNumber],
-          featured_media: imageId,
-        };
-
-        console.log(`3/4: Publicando post en WordPress...`);
-        const wordpressResponse = await publishToWordPress(postData);
-
-        console.log(`4/4: Actualizando evento en la base de datos...`);
-        await eventsCollection.updateOne(
-          { _id: event._id },
-          { $set: { contentStatus: 'published', wordpressPostId: wordpressResponse.id, publicationDate: publicationDate, blogPostUrl: wordpressResponse.link } }
-        );
-
-        console.log(`✅ Post para "${event.name}" programado con éxito. URL: ${wordpressResponse.link}`);
-
-      } catch (error) {
-        console.error(`❌ Error procesando el evento "${event.name}":`, error.message);
-      }
     }
-
-  } catch (error) {
-    console.error('Ha ocurrido un error fatal en el publicador:', error);
-  } finally {
-    // Se elimina rl.close() y se añade el cierre de la conexión a la BBDD si es necesario
-    console.log('Proceso de publicación finalizado.');
-  }
 }
 
-main();
+// Exportar la función principal
+module.exports = { publishPosts };
