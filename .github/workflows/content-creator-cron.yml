@@ -4,8 +4,8 @@ name: Content Creator
 
 on:
   schedule:
-    # Ejecuta el flujo de trabajo cada dos horas
-    - cron: '0 */2 * * *' 
+    # Ejecuta el flujo de trabajo cada seis horas
+    - cron: '0 */6 * * *' 
   workflow_dispatch:
 
 jobs:
