@@ -47,8 +47,9 @@ async function verifyFlamencoWithGemini(eventData) {
         const text = result.response.text().trim().toLowerCase();
         return text.includes('flamenco') && !text.includes('no-flamenco');
     } catch (error) {
-        console.error('Error al verificar el evento con Gemini:', error);
-        return false; // Asumir no-flamenco en caso de error
+        // Si la API falla (ej. clave inválida), lanzamos el error para que el proceso principal lo capture
+        console.error(`   ❌ Error en la llamada a la API de Gemini para el evento "${eventData.name}".`);
+        throw error; 
     }
 }
 
@@ -85,7 +86,7 @@ async function enrichEvents() {
             // 1. Verificar si es flamenco
             const isFlamenco = await verifyFlamencoWithGemini(event);
             if (!isFlamenco) {
-                console.warn(`   ⚠️ El evento "${event.name}" no parece ser de flamenco. Eliminando.`);
+                console.warn(`   ⚠️  El evento "${event.name}" ha sido clasificado como NO flamenco. Eliminando.`);
                 await eventsCollection.deleteOne({ _id: new ObjectId(event._id) });
                 continue; // Saltar al siguiente evento
             }
