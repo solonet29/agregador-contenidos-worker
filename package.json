@@ -19,6 +19,7 @@
   "homepage": "https://github.com/solonet29/agregador-contenidos-worker#readme",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@r/api-client": "^3.37.0",
     "axios": "^1.11.0",
     "canvas": "^3.2.0",
     "cheerio": "^1.1.2",
@@ -28,7 +29,9 @@
     "jimp": "^1.6.0",
     "marked": "^16.1.2",
     "mongodb": "^6.18.0",
+    "pinterest-sdk": "^1.1.0",
     "sharp": "^0.34.3",
-    "showdown": "^2.1.0"
+    "showdown": "^2.1.0",
+    "twitter-api-v2": "^1.15.2"
   }
 }

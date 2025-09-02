@@ -1,5 +1,6 @@
 
 // config.js
+require('dotenv').config();
 // Almacena toda la configuración del worker para mantener los scripts de lógica limpios.
 
 const config = {
@@ -63,8 +64,23 @@ Usa un tono inspirador y práctico.`,
 
     // Configuración de Redes Sociales
     socialMedia: {
-        pinterestBoardId: "TU_ID_DE_TABLERO", // Reemplazar con el ID real del tablero de Pinterest
-        redditSubreddits: ['flamenco', 'spain', 'andalucia', 'Flamenco']
+        x: {
+            appKey: process.env.TWITTER_API_KEY,
+            appSecret: process.env.TWITTER_API_KEY_SECRET,
+            accessToken: process.env.TWITTER_ACCESS_TOKEN,
+            accessSecret: process.env.TWITTER_ACCESS_TOKEN_SECRET,
+        },
+        pinterest: {
+            accessToken: process.env.PINTEREST_ACCESS_TOKEN,
+            boardId: process.env.PINTEREST_BOARD_ID || "default-board-id",
+        },
+        reddit: {
+            clientId: process.env.REDDIT_CLIENT_ID,
+            clientSecret: process.env.REDDIT_CLIENT_SECRET,
+            username: process.env.REDDIT_USERNAME,
+            password: process.env.REDDIT_PASSWORD,
+            subreddits: ['flamenco', 'spain', 'andalucia', 'Flamenco']
+        }
     }
 };
 
