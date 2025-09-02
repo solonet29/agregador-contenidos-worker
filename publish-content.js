@@ -1,4 +1,3 @@
-
 // publish-content.js (Refactorizado como Módulo)
 // OBJETIVO: Tomar eventos enriquecidos, crear su imagen final y publicarlos en WordPress.
 
@@ -22,7 +21,8 @@ async function publishPosts() {
         wordpressPostId: { $exists: false }
     };
 
-    const eventsToPublish = await eventsCollection.find(query).limit(config.BATCH_SIZE).toArray();
+    // --- CAMBIO 1: Usamos la nueva variable de config para el lote de publicación ---
+    const eventsToPublish = await eventsCollection.find(query).limit(config.PUBLISH_BATCH_SIZE).toArray();
 
     if (eventsToPublish.length === 0) {
         console.log('✅ No hay contenido nuevo para publicar en WordPress.');
@@ -31,12 +31,12 @@ async function publishPosts() {
 
     console.log(`⚙️ Se encontraron ${eventsToPublish.length} eventos para publicar.`);
 
-    for (const [index, event] of eventsToPublish.entries()) {
+    for (const event of eventsToPublish) { // Eliminado 'index' porque ya no lo necesitamos
         try {
             console.log(`   -> Publicando: "${event.blogPostTitle}"`);
 
             // 1. Crear y subir la imagen social para el post
-            console.log(`      -> 1/3: Creando imagen social...`);
+            console.log(`      -> 1/3: Creando imagen social...`);
             const imagePath = await createPostImage(event);
             const imageUploadResponse = await uploadImage(imagePath, event.name);
             if (!imageUploadResponse || !imageUploadResponse.imageId) {
@@ -46,25 +46,25 @@ async function publishPosts() {
             const imageUrl = imageUploadResponse.imageUrl;
 
             // 2. Preparar el contenido final del post
-            console.log(`      -> 2/3: Preparando contenido final...`);
+            console.log(`      -> 2/3: Preparando contenido final...`);
             const footer = config.htmlBlocks.postFooter(event);
             const finalHtmlContent = event.blogPostHtml + footer;
 
-            // Programar la publicación para el futuro para no publicar todo de golpe
-            const publicationDate = new Date();
-            publicationDate.setHours(publicationDate.getHours() + index + 1);
+            // --- CAMBIO 2: Eliminamos la lógica de programación futura ---
+            // const publicationDate = new Date(); // Ya no se calcula una fecha futura
+            // publicationDate.setHours(publicationDate.getHours() + index + 1); // Ya no se escalona
 
             const postData = {
                 title: event.blogPostTitle,
                 content: finalHtmlContent,
-                status: 'future', // Publicar en el futuro
-                date: publicationDate.toISOString(),
+                status: 'publish', // <-- Se publica inmediatamente
+                // date: publicationDate.toISOString(), // <-- Se elimina la fecha programada
                 categories: [config.WORDPRESS_EVENTS_CATEGORY_ID],
                 featured_media: imageId,
             };
 
             // 3. Publicar en WordPress y actualizar la BBDD
-            console.log(`      -> 3/3: Publicando en WordPress...`);
+            console.log(`      -> 3/3: Publicando en WordPress...`);
             const wordpressResponse = await publishToWordPress(postData);
 
             await eventsCollection.updateOne(
@@ -73,15 +73,15 @@ async function publishPosts() {
                     $set: {
                         status: 'published',
                         wordpressPostId: wordpressResponse.id,
-                        publicationDate: publicationDate,
+                        publicationDate: new Date(), // Guardamos la fecha actual de publicación
                         blogPostUrl: wordpressResponse.link,
                         featuredImageId: imageId,
-                        featuredImageUrl: imageUrl // <-- CAMPO AÑADIDO
+                        featuredImageUrl: imageUrl
                     }
                 }
             );
 
-            console.log(`   ✅ Post para "${event.name}" programado. URL: ${wordpressResponse.link}`);
+            console.log(`   ✅ Post para "${event.name}" publicado. URL: ${wordpressResponse.link}`);
 
         } catch (error) {
             console.error(`   ❌ Error procesando la publicación de "${event.name}":`, error.message);
