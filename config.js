@@ -5,7 +5,7 @@ require('dotenv').config();
 const config = {
     // --- NUEVO: Configuración de Lotes Independientes ---
     // Lote para el PUBLICADOR (Paso 2): Cuántos posts crear en WordPress por ejecución.
-    PUBLISH_BATCH_SIZE: 10,
+    PUBLISH_BATCH_SIZE: 4,
     // Lote para el DISTRIBUIDOR (Paso 3): Cuántos posts enviar a redes sociales por ejecución.
     DISTRIBUTE_BATCH_SIZE: 4,
 
