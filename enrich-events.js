@@ -1,17 +1,20 @@
 
-// enrich-events.js (Refactorizado como Módulo)
+// enrich-events.js (Versión con Groq y sin filtro)
 // OBJETIVO: Tomar eventos "en bruto" y enriquecerlos con contenido de texto generado por IA.
 
 require('dotenv').config();
 const { connectToDatabase } = require('./lib/database.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const Groq = require('groq-sdk');
 const { ObjectId } = require('mongodb');
 const showdown = require('showdown');
 const config = require('./config.js'); // Importar la configuración central
 
 // --- INICIALIZACIÓN DE SERVICIOS ---
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY no está definida.');
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY
+});
+const GROQ_MODEL = 'llama-3.1-8b-instant'; // Modelo actualizado
 const converter = new showdown.Converter();
 
 /**
@@ -32,25 +35,6 @@ function createFinalPostContent(event, nightPlanText) {
     const htmlContent = introHtml + nightPlanHtml + ctaHtml;
 
     return { title, htmlContent };
-}
-
-/**
- * Verifica si un evento está relacionado con el flamenco utilizando Gemini.
- * @param {object} eventData - Datos del evento (artista, nombre, descripción).
- * @returns {Promise<boolean>} Retorna true si es flamenco, false en caso contrario.
- */
-async function verifyFlamencoWithGemini(eventData) {
-    // Usamos el prompt desde el fichero de configuración
-    const prompt = config.prompts.verifyFlamenco(eventData);
-    try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim().toLowerCase();
-        return text.includes('flamenco') && !text.includes('no-flamenco');
-    } catch (error) {
-        // Si la API falla (ej. clave inválida), lanzamos el error para que el proceso principal lo capture
-        console.error(`   ❌ Error en la llamada a la API de Gemini para el evento "${eventData.name}".`);
-        throw error; 
-    }
 }
 
 /**
@@ -83,18 +67,15 @@ async function enrichEvents() {
         try {
             console.log(`   -> Procesando texto para: "${event.name}"`);
 
-            // 1. Verificar si es flamenco
-            const isFlamenco = await verifyFlamencoWithGemini(event);
-            if (!isFlamenco) {
-                console.warn(`   ⚠️  El evento "${event.name}" ha sido clasificado como NO flamenco. Eliminando.`);
-                await eventsCollection.deleteOne({ _id: new ObjectId(event._id) });
-                continue; // Saltar al siguiente evento
-            }
+            // El filtro de flamenco ha sido eliminado temporalmente a petición del usuario.
 
             // 2. Generar plan de noche
             const prompt = config.prompts.nightPlan(event);
-            const result = await model.generateContent(prompt);
-            const nightPlanText = result.response.text();
+            const chatCompletion = await groq.chat.completions.create({
+                messages: [{ role: "user", content: prompt }],
+                model: GROQ_MODEL,
+            });
+            const nightPlanText = chatCompletion.choices[0]?.message?.content || "";
 
             if (!nightPlanText || !nightPlanText.includes('##')) {
                 throw new Error("La respuesta de la IA para el plan no tiene el formato esperado.");

@@ -1,19 +1,19 @@
-// content-creator.js (VERSIÓN CORREGIDA Y MEJORADA)
+// content-creator.js (VERSIÓN CON GROQ)
 
-console.log("--- Ejecutando content-creator.js v2.1 (corregido y mejorado) ---");
+console.log("--- Ejecutando content-creator.js v3.1 (con Groq y sin filtro) ---");
 require('dotenv').config();
-const { connectToDatabase } = require('./lib/database.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { connectToDatabase } = require('../lib/database.js');
+const Groq = require('groq-sdk');
 const readline = require('readline');
 const { ObjectId } = require('mongodb');
 const showdown = require('showdown');
 
-// --- LÓGICA DE GEMINI ---
-if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY no está definida.');
-const genAI = new GoogleGenerativeAI({
-    apiKey: process.env.GEMINI_API_KEY
+// --- LÓGICA DE GROQ ---
+if (!process.env.GROQ_API_KEY) throw new Error('GROQ_API_KEY no está definida.');
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY
 });
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const GROQ_MODEL = 'llama-3.1-8b-instant'; // Modelo actualizado
 const converter = new showdown.Converter();
 
 const nightPlanPromptTemplate = (event) => `
@@ -53,81 +53,38 @@ async function askQuestion(query) {
 }
 
 /**
- * **NUEVA FUNCIÓN AÑADIDA**
  * Construye el título y el contenido HTML final para el post del blog.
  * @param {object} event - El objeto del evento.
  * @param {string} nightPlanText - El plan de noche en formato Markdown generado por la IA.
  * @returns {{title: string, htmlContent: string}} El título y el contenido en HTML.
  */
 function createFinalPostContent(event, nightPlanText) {
-    // Crear un título SEO optimizado
     const title = `${event.name} en ${event.city}: Guía para una Noche Flamenca Inolvidable`;
-
-    // Convertir el plan de noche de Markdown a HTML
     const nightPlanHtml = converter.makeHtml(nightPlanText);
-
-    // Crear una introducción para el post
     const introHtml = `
         <p>El flamenco es más que un espectáculo; es una experiencia que envuelve todos los sentidos. Si tienes la suerte de asistir a la actuación de <strong>${event.artist || event.name}</strong> en <strong>${event.venue}</strong>, te hemos preparado una guía para que tu velada sea redonda, desde las tapas previas hasta la última copa.</p>
         <p>Descubre cómo vivir una noche flamenca completa en ${event.city}.</p>
     `;
-
-    // Combinar todo en el contenido final
     const htmlContent = introHtml + nightPlanHtml;
-
     return { title, htmlContent };
-}
-
-
-/**
- * Verifica si un evento está relacionado con el flamenco utilizando Gemini.
- * @param {object} eventData - Datos del evento (artista, nombre, descripción).
- * @returns {Promise<boolean>} Retorna true si es flamenco, false en caso contrario.
- */
-async function verifyFlamencoWithGemini(eventData) {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    // --- PROMPT MEJORADO ---
-    const prompt = `En el contexto de una agenda cultural de música en España, analiza la siguiente información y determina si se trata de un evento de flamenco. Considera que nombres de artistas como 'Argentina' o 'Arcángel' son cantaores de flamenco muy conocidos, aunque el nombre pueda parecer genérico. Responde SÓLO con "flamenco" o "no-flamenco".
-
-    Nombre del evento: ${eventData.name}
-    Artista: ${eventData.artist}
-    Descripción: ${eventData.description}`;
-
-    try {
-        const result = await model.generateContent(prompt);
-        const text = result.response.text().trim().toLowerCase();
-
-        // La lógica de comprobación se mantiene, es robusta.
-        if (text.includes('flamenco') && !text.includes('no-flamenco')) {
-            return true;
-        }
-    } catch (error) {
-        console.error('Error al verificar el evento con Gemini:', error);
-    }
-    return false;
 }
 
 async function generateContentForEvent(db, event) {
     console.log(`🔥 Procesando contenido para: "${event.name}"`);
 
-    // --- Saneamiento de eventos ---
-    const isFlamenco = await verifyFlamencoWithGemini(event);
-    if (!isFlamenco) {
-        console.warn(`⚠️ El evento "${event.name}" no parece ser de flamenco. Eliminando de la base de datos.`);
-        await db.collection('events').deleteOne({ _id: new ObjectId(event._id) });
-        return; // No continuar con la generación de contenido
-    }
+    // El filtro de flamenco ha sido eliminado temporalmente a petición del usuario.
 
     const prompt = nightPlanPromptTemplate(event);
-    const result = await model.generateContent(prompt);
-    const nightPlanText = result.response.text();
+    const chatCompletion = await groq.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: GROQ_MODEL,
+    });
+    const nightPlanText = chatCompletion.choices[0]?.message?.content || "";
 
     if (!nightPlanText || !nightPlanText.includes('##')) {
         throw new Error("La respuesta de la IA para el plan no tiene el formato esperado.");
     }
 
-    // Montar el contenido completo del post
     const { title, htmlContent } = createFinalPostContent(event, nightPlanText);
 
     await db.collection('events').updateOne(

@@ -39,11 +39,11 @@ async function publishPosts() {
             console.log(`      -> 1/3: Creando imagen social...`);
             const imagePath = await createPostImage(event);
             const imageUploadResponse = await uploadImage(imagePath, event.name);
-            if (!imageUploadResponse || !imageUploadResponse.id) {
+            if (!imageUploadResponse || !imageUploadResponse.imageId) {
                 throw new Error('La subida de la imagen a WordPress falló.');
             }
-            const imageId = imageUploadResponse.id;
-            const imageUrl = imageUploadResponse.source_url;
+            const imageId = imageUploadResponse.imageId;
+            const imageUrl = imageUploadResponse.imageUrl;
 
             // 2. Preparar el contenido final del post
             console.log(`      -> 2/3: Preparando contenido final...`);

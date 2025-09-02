@@ -1,5 +1,6 @@
 // content-creator.js
 // Orquestador principal del flujo de trabajo de creación y publicación de contenido.
+require('dotenv').config(); // Cargar variables de entorno PRIMERO
 
 console.log("🚀 Iniciando el Orquestador de Contenido...");
 
