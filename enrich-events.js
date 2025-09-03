@@ -17,6 +17,9 @@ const groq = new Groq({
 const GROQ_MODEL = 'llama-3.1-8b-instant'; // Modelo actualizado
 const converter = new showdown.Converter();
 
+// --- NUEVO: Helper para gestionar esperas ---
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Construye el título y el contenido HTML final para el post del blog.
  * @param {object} event - El objeto del evento.
@@ -77,16 +80,43 @@ async function enrichEvents() {
 
             // El filtro de flamenco ha sido eliminado temporalmente a petición del usuario.
 
-            // 2. Generar plan de noche
-            const prompt = config.prompts.nightPlan(event);
-            const chatCompletion = await groq.chat.completions.create({
-                messages: [{ role: "user", content: prompt }],
-                model: GROQ_MODEL,
-            });
-            const nightPlanText = chatCompletion.choices[0]?.message?.content || "";
+            // 2. Generar plan de noche con reintentos
+            const MAX_RETRIES = 3;
+            const RETRY_DELAY = 5000; // 5 segundos
+            let nightPlanText = "";
+            let lastError = null;
 
-            if (!nightPlanText || !nightPlanText.includes('##')) {
-                throw new Error("La respuesta de la IA para el plan no tiene el formato esperado.");
+            for (let i = 0; i < MAX_RETRIES; i++) {
+                try {
+                    const prompt = config.prompts.nightPlan(event);
+                    const chatCompletion = await groq.chat.completions.create({
+                        messages: [{ role: "user", content: prompt }],
+                        model: GROQ_MODEL,
+                    });
+                    nightPlanText = chatCompletion.choices[0]?.message?.content || "";
+                    
+                    // Si la respuesta es válida, salimos del bucle
+                    if (nightPlanText && nightPlanText.includes('##')) {
+                        lastError = null; // Reseteamos el error
+                        break;
+                    } else {
+                        // Si la respuesta no es válida, la tratamos como un error para reintentar
+                        throw new Error("La respuesta de la IA para el plan no tiene el formato esperado.");
+                    }
+
+                } catch (error) {
+                    lastError = error;
+                    console.warn(`   ⚠️ Intento ${i + 1}/${MAX_RETRIES} fallido para "${event.name}". Reintentando en ${RETRY_DELAY / 1000}s...`);
+                    console.warn(`      Error: ${error.message}`);
+                    if (i < MAX_RETRIES - 1) {
+                        await delay(RETRY_DELAY);
+                    } 
+                }
+            }
+
+            // Si después de los reintentos sigue habiendo error, lo lanzamos
+            if (lastError) {
+                throw lastError;
             }
 
             // 3. Montar el contenido completo del post

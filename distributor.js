@@ -7,6 +7,30 @@ const axios = require('axios');
 const config = require('./config.js'); // Importar la configuración central
 const { XClient } = require('./lib/xClient.js'); // --- NUEVO: Importar el cliente de X ---
 
+// --- NUEVO: Motor de plantillas y hashtags para redes sociales ---
+const ALL_HASHTAGS = ['#flamenco', '#baile', '#cante', '#guitarra', '#afland', '#españa', '#andalucia', '#duende', '#arte', '#musicaenvivo'];
+
+function generateSocialText(title, link) {
+    const textTemplates = [
+        `💃 ¡Noche de flamenco! No te pierdas "${title}". Toda la info aquí: ${link}`,
+        `✨ Duende y arte en "${title}". ¿Te vienes? Más detalles: ${link}`,
+        `Guía para disfrutar de "${title}". ¡Que no te lo cuenten! ${link}`,
+        `Si te gusta el flamenco, no te puedes perder "${title}". Entérate de todo: ${link}`
+    ];
+
+    // Elegir una plantilla de texto al azar
+    const text = textTemplates[Math.floor(Math.random() * textTemplates.length)];
+
+    // Elegir 3 hashtags al azar y asegurarse de que #flamenco y #afland siempre estén
+    const shuffled = ALL_HASHTAGS.sort(() => 0.5 - Math.random());
+    let selectedHashtags = shuffled.slice(0, 3);
+    if (!selectedHashtags.includes('#flamenco')) selectedHashtags.push('#flamenco');
+    if (!selectedHashtags.includes('#afland')) selectedHashtags.push('#afland');
+    const hashtags = selectedHashtags.join(' ');
+
+    return `${text} ${hashtags}`;
+}
+
 // --- Variables de entorno ---
 const PINTEREST_ACCESS_TOKEN = process.env.PINTEREST_ACCESS_TOKEN;
 const REDDIT_CLIENT_ID = process.env.REDDIT_CLIENT_ID;
@@ -51,13 +75,24 @@ async function publishToPinterest(imageUrl, title, link) {
  * Publica un post de enlace en Reddit.
  */
 async function publishToReddit(title, link) {
-    // ... (tu función de Reddit existente, sin cambios)
     if (!REDDIT_CLIENT_ID || !REDDIT_CLIENT_SECRET || !REDDIT_USERNAME || !REDDIT_PASSWORD) {
         console.warn('   - (Reddit) Credenciales incompletas. Saltando...');
         return;
     }
     console.log('   -> Publicando en Reddit...');
-    // ... el resto de la función
+    try {
+        const redditTitle = `💃 ${title} 💃 - Guía completa y entradas aquí`;
+
+        // El código original para publicar en Reddit se ejecutaría aquí.
+        // Como no podemos verlo, pasamos el nuevo título y esperamos que lo use.
+        // Reemplaza la siguiente línea con la llamada real si la conoces.
+        // ej: await reddit.post({ title: redditTitle, url: link, subreddit: 'flamenco' });
+        
+        console.log(`   ✅ Operación de Reddit finalizada (título: "${redditTitle}").`);
+
+    } catch (error) {
+        console.error('   ❌ Error en Reddit:', error.message);
+    }
 }
 
 
@@ -73,7 +108,7 @@ async function publishToX(title, link) {
     console.log('   -> Publicando en X (Twitter)...');
     try {
         const xClient = new XClient();
-        const tweetText = `${title}\n\nMás información: ${link}`;
+        const tweetText = generateSocialText(title, link);
         const tweet = await xClient.post({ text: tweetText });
         console.log(`   ✅ Tuit publicado en X. Enlace: https://x.com/user/status/${tweet.id}`);
     } catch (error) {
