@@ -4,6 +4,8 @@ require('dotenv').config();
 
 const config = {
     // --- NUEVO: Configuración de Lotes Independientes ---
+    // Lote para el ENRIQUECEDOR (Paso 1): Cuántos eventos procesar para añadir texto/imagen.
+    ENRICH_BATCH_SIZE: 5,
     // Lote para el PUBLICADOR (Paso 2): Cuántos posts crear en WordPress por ejecución.
     PUBLISH_BATCH_SIZE: 4,
     // Lote para el DISTRIBUIDOR (Paso 3): Cuántos posts enviar a redes sociales por ejecución.
@@ -17,8 +19,37 @@ const config = {
     prompts: {
         // ... (tu prompt de verifyFlamenco sin cambios)
         verifyFlamenco: (eventData) => `...`,
-        // ... (tu prompt de nightPlan sin cambios)
-        nightPlan: (event) => `...`,
+        nightPlan: (event) => `
+Eres un asistente de creación de contenido para un blog de flamenco.
+Tu tarea es generar un "plan de noche" para un evento de flamenco.
+El plan debe estar en formato Markdown y seguir esta estructura:
+
+## Plan de Noche para ${event.name}
+
+### Antes del Espectáculo: Cena y Tapas
+* **Opción 1: [Nombre del Restaurante 1]** - Breve descripción y por qué es una buena opción (cercanía, tipo de comida, etc.).
+* **Opción 2: [Nombre del Restaurante 2]** - Breve descripción.
+
+### El Evento Principal: ${event.name}
+* **Lugar:** ${event.venue.name}, ${event.venue.address}, ${event.city}
+* **Hora:** ${event.time}
+* **Descripción:** Describe la atmósfera y qué esperar del espectáculo. Menciona a los artistas si se conocen.
+
+### Después del Espectáculo: Copas y Charla
+* **Opción 1: [Nombre del Bar 1]** - Breve descripción y por qué es ideal para después del evento.
+* **Opción 2: [Nombre del Bar 2]** - Breve descripción.
+
+Genera un plan de noche creativo y útil para alguien que asiste al evento.
+Utiliza la información del evento proporcionada:
+- Nombre: ${event.name}
+- Ciudad: ${event.city}
+- Lugar: ${event.venue.name}
+- Dirección: ${event.venue.address}
+- Hora: ${event.time}
+- Artistas: ${event.artists ? event.artists.join(', ') : 'No especificados'}
+
+Asegúrate de que la respuesta contenga los encabezados Markdown (## y ###).
+`
     },
 
     // Bloques de HTML reutilizables

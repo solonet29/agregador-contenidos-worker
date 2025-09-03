@@ -24,7 +24,15 @@ const converter = new showdown.Converter();
  * @returns {{title: string, htmlContent: string}} El título y el contenido en HTML.
  */
 function createFinalPostContent(event, nightPlanText) {
-    const title = `${event.name} en ${event.city}: Guía para una Noche Flamenca Inolvidable`;
+    const titleTemplates = [
+        `${event.name} en ${event.city}: Tu Noche Flamenca Perfecta`,
+        `Guía Completa para ${event.name} en ${event.city}`,
+        `Disfruta del Mejor Flamenco: ${event.name} en ${event.city}`,
+        `${event.name}: La Experiencia Flamenca Definitiva en ${event.city}`,
+        `Noche de Duende: ${event.name} en ${event.city}`
+    ];
+    const title = titleTemplates[Math.floor(Math.random() * titleTemplates.length)];
+
     const nightPlanHtml = converter.makeHtml(nightPlanText);
     
     // Usamos los bloques de HTML desde el fichero de configuración
@@ -54,7 +62,7 @@ async function enrichEvents() {
         name: { $exists: true, $ne: "" }
     };
 
-    const eventsToProcess = await eventsCollection.find(query).limit(config.BATCH_SIZE).toArray();
+    const eventsToProcess = await eventsCollection.find(query).limit(config.ENRICH_BATCH_SIZE).toArray();
 
     if (eventsToProcess.length === 0) {
         console.log("✅ No se encontraron eventos nuevos para enriquecer con texto.");

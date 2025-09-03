@@ -93,7 +93,7 @@ async function distributePosts() {
         status: 'published',
         isDistributed: { $exists: false }
     };
-    const postsToDistribute = await eventsCollection.find(query).limit(config.BATCH_SIZE).toArray();
+    const postsToDistribute = await eventsCollection.find(query).limit(config.DISTRIBUTE_BATCH_SIZE).toArray();
 
     if (postsToDistribute.length === 0) {
         console.log('✅ No hay posts nuevos para distribuir en redes sociales.');
