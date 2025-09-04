@@ -2,10 +2,11 @@
 // OBJETIVO: Distribuir posts ya publicados en WordPress a redes sociales.
 
 require('dotenv').config();
-const { connectToDatabase } = require('./lib/database.js');
+const { connectToDatabase, closeDatabaseConnection } = require('./lib/database.js');
 const axios = require('axios');
 const config = require('./config.js'); // Importar la configuración central
 const { XClient } = require('./lib/xClient.js'); // --- NUEVO: Importar el cliente de X ---
+const { RedditClient } = require('./lib/redditClient.js'); // Importar el cliente de Reddit
 
 // --- NUEVO: Motor de plantillas y hashtags para redes sociales ---
 const ALL_HASHTAGS = ['#flamenco', '#baile', '#cante', '#guitarra', '#afland', '#españa', '#andalucia', '#duende', '#arte', '#musicaenvivo'];
@@ -74,7 +75,7 @@ async function publishToPinterest(imageUrl, title, link) {
 /**
  * Publica un post de enlace en Reddit.
  */
-async function publishToReddit(title, link) {
+async function publishToReddit(title, link, imageUrl) {
     if (!REDDIT_CLIENT_ID || !REDDIT_CLIENT_SECRET || !REDDIT_USERNAME || !REDDIT_PASSWORD) {
         console.warn('   - (Reddit) Credenciales incompletas. Saltando...');
         return;
@@ -82,11 +83,16 @@ async function publishToReddit(title, link) {
     console.log('   -> Publicando en Reddit...');
     try {
         const redditTitle = `💃 ${title} 💃 - Guía completa y entradas aquí`;
+        // --- START NEW REDDIT LOGIC ---
+        const redditClient = new RedditClient();
+        const subreddit = config.socialMedia.redditSubreddit; // Assuming you have a config for Reddit subreddit
 
-        // El código original para publicar en Reddit se ejecutaría aquí.
-        // Como no podemos verlo, pasamos el nuevo título y esperamos que lo use.
-        // Reemplaza la siguiente línea con la llamada real si la conoces.
-        // ej: await reddit.post({ title: redditTitle, url: link, subreddit: 'flamenco' });
+        if (imageUrl) {
+            await redditClient.submitImage({ subreddit, title: redditTitle, imageUrl });
+        } else {
+            await redditClient.submitLink({ subreddit, title: redditTitle, url: link });
+        }
+        // --- END NEW REDDIT LOGIC ---
         
         console.log(`   ✅ Operación de Reddit finalizada (título: "${redditTitle}").`);
 
@@ -100,16 +106,17 @@ async function publishToReddit(title, link) {
 /**
  * Publica un tuit en X (Twitter).
  */
-async function publishToX(title, link) {
+async function publishToX(title, link, imageUrl) {
     if (!TWITTER_API_KEY || !TWITTER_API_KEY_SECRET || !TWITTER_ACCESS_TOKEN || !TWITTER_ACCESS_TOKEN_SECRET) {
         console.warn('   - (X) Credenciales incompletas. Saltando...');
         return;
     }
-    console.log('   -> Publicando en X (Twitter)...');
+    console.log('   -> Publicando en X (Twitter)...
+');
     try {
         const xClient = new XClient();
         const tweetText = generateSocialText(title, link);
-        const tweet = await xClient.post({ text: tweetText });
+        const tweet = await xClient.post({ text: tweetText, imageUrl: imageUrl });
         console.log(`   ✅ Tuit publicado en X. Enlace: https://x.com/user/status/${tweet.id}`);
     } catch (error) {
         console.error('   ❌ Error en X:', error.message);
@@ -147,8 +154,8 @@ async function distributePosts() {
 
         // --- Bucle de publicación actualizado ---
         if (imageUrl) await publishToPinterest(imageUrl, event.blogPostTitle, event.blogPostUrl);
-        await publishToReddit(event.blogPostTitle, event.blogPostUrl);
-        await publishToX(event.blogPostTitle, event.blogPostUrl); // <-- AÑADIDO
+        await publishToReddit(event.blogPostTitle, event.blogPostUrl, imageUrl);
+        await publishToX(event.blogPostTitle, event.blogPostUrl, imageUrl); // <-- AÑADIDO
 
         await eventsCollection.updateOne({ _id: event._id }, { $set: { isDistributed: true } });
         console.log(`   ✅ Evento '${event.name}' marcado como distribuido.`);

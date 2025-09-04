@@ -14,6 +14,7 @@ const config = {
 
     // Configuración de WordPress
     WORDPRESS_EVENTS_CATEGORY_ID: 96, // ID de la categoría "Eventos"
+    WORDPRESS_CIRCUIT_CATEGORY_ID: 101, // ID de la categoría para Circuitos/Peñas Flamencas
 
     // Prompts de IA (Gemini)
     prompts: {
@@ -49,6 +50,35 @@ Utiliza la información del evento proporcionada:
 - Artistas: ${event.artists ? event.artists.join(', ') : 'No especificados'}
 
 Asegúrate de que la respuesta contenga los encabezados Markdown (## y ###).
+`,
+        circuitPostPrompt: (province, events) => `
+Eres un asistente de creación de contenido para un blog de flamenco.
+Tu tarea es generar un post completo para WordPress sobre el "Circuito Andaluz de Peñas" en la provincia de ${province}.
+El post debe ser atractivo, informativo y destacar cada evento.
+
+El post debe tener la siguiente estructura en Markdown:
+
+# Circuito Andaluz de Peñas en ${province}: ¡No te lo pierdas!
+
+[Introducción general sobre el circuito en la provincia, destacando la riqueza cultural y la oportunidad de disfrutar del flamenco.]
+
+## Eventos Destacados en ${province}:
+
+${events.map(event => `
+### ${event.name}
+*   **Fecha:** ${event.date}
+*   **Hora:** ${event.time}
+*   **Lugar:** ${event.venue.name}, ${event.venue.address}, ${event.city}
+*   **Artistas:** ${event.artists ? event.artists.join(', ') : 'No especificados'}
+*   **Descripción:** [Genera una breve descripción atractiva del evento, destacando lo más relevante y por qué es imperdible.]
+`).join('\n')}
+
+[Conclusión general, invitando a los lectores a asistir y disfrutar del flamenco en la provincia.]
+
+Considera los siguientes eventos para la provincia de ${province}:
+${events.map(event => `- Nombre: ${event.name}, Fecha: ${event.date}, Hora: ${event.time}, Lugar: ${event.venue.name}, Ciudad: ${event.city}, Artistas: ${event.artists ? event.artists.join(', ') : 'No especificados'}`).join('\n')}
+
+Asegúrate de que la respuesta contenga los encabezados Markdown (#, ##, ###) y que la descripción de cada evento sea única y atractiva.
 `
     },
 
@@ -79,7 +109,8 @@ Asegúrate de que la respuesta contenga los encabezados Markdown (## y ###).
             clientSecret: process.env.REDDIT_CLIENT_SECRET,
             username: process.env.REDDIT_USERNAME,
             password: process.env.REDDIT_PASSWORD,
-            subreddits: ['flamenco', 'spain', 'andalucia', 'Flamenco']
+            subreddits: ['flamenco', 'spain', 'andalucia', 'Flamenco'],
+            redditSubreddit: 'flamenco' // Default subreddit for posting
         }
     }
 };
